@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3 uid="uid://7mlgfihvqf2i"]
+
+[ext_resource type="Script" uid="uid://cj1k0srcmed6d" path="res://scripts/core/main.gd" id="1"]
+
+[node name="Main" type="Node"]
+script = ExtResource("1")
+
+[node name="UILayer" type="CanvasLayer" parent="."]
+
+[node name="SceneContainer" type="Node" parent="."]
