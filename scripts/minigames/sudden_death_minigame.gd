@@ -25,16 +25,16 @@ var dead_players: Dictionary = {}  # player_id -> respawn_timer
 var respawn_pool: Array[Vector2] = []  # Available respawn positions
 
 # Preload scenes
-var player_scene = preload("res://scenes/player/base_player.tscn")
-var pistol_scene = preload("res://scenes/items/pistol.tscn")
-var bat_scene = preload("res://scenes/items/bat.tscn")
-var player_hud_scene = preload("res://scenes/ui/player_hud.tscn")
+var player_scene: PackedScene = preload("res://scenes/player/base_player.tscn")
+var pistol_scene: PackedScene = preload("res://scenes/items/pistol.tscn")
+var bat_scene: PackedScene = preload("res://scenes/items/bat.tscn")
+var player_hud_scene: PackedScene = preload("res://scenes/ui/player_hud.tscn")
 
 # HUD instance
 var player_hud: PlayerHUD = null
 
 func _ready() -> void:
-	print("Sudden Death minigame initialized")
+	Logger.game_flow("Sudden Death minigame initialized", "SuddenDeathMinigame")
 	
 	# Connect UI signals
 	if back_button:
@@ -69,14 +69,14 @@ func _update_game_timer_display() -> void:
 
 ## Handle back button press
 func _on_back_button_pressed() -> void:
-	print("Returning to map view...")
+	Logger.game_flow("Returning to map view", "SuddenDeathMinigame")
 	EventBus.request_scene_transition("res://scenes/ui/map_view.tscn")
 	GameManager.change_state(GameManager.GameState.MAP_VIEW)
 
 # Removed _on_player_health_changed - now handled by PlayerHUD automatically
 
 func _setup_arena() -> void:
-	print("Arena setup complete with platforms and boundaries")
+	Logger.system("Arena setup complete with platforms and boundaries", "SuddenDeathMinigame")
 	_setup_respawn_pool()
 
 ## Setup the respawn point pool
@@ -88,10 +88,10 @@ func _setup_respawn_pool() -> void:
 		if child is Marker2D:
 			respawn_pool.append(child.global_position)
 	
-	print("Respawn pool setup with ", respawn_pool.size(), " points: ", respawn_pool)
+	Logger.system("Respawn pool setup with " + str(respawn_pool.size()) + " points: " + str(respawn_pool), "SuddenDeathMinigame")
 
 func _spawn_players() -> void:
-	print("Spawning players...")
+	Logger.game_flow("Spawning players", "SuddenDeathMinigame")
 	
 	# Get spawn point positions
 	var spawn_positions: Array[Vector2] = []
@@ -137,11 +137,11 @@ func _spawn_players() -> void:
 			# Add to players array
 			players.append(player_instance)
 			
-			print("Spawned player: ", player_data.player_name, " at ", spawn_positions[player_count])
+			Logger.system("Spawned player: " + player_data.player_name + " at " + str(spawn_positions[player_count]), "SuddenDeathMinigame")
 			player_count += 1
 
 func _spawn_items() -> void:
-	print("Spawning items...")
+	Logger.game_flow("Spawning items", "SuddenDeathMinigame")
 	
 	# Get item spawn positions
 	var item_positions: Array[Vector2] = []
@@ -157,7 +157,7 @@ func _spawn_items() -> void:
 		item_instance.global_position = item_positions[i]
 		spawned_items.append(item_instance)
 		
-		print("Spawned ", item_instance.item_name, " at ", item_positions[i])
+		Logger.system("Spawned " + item_instance.item_name + " at " + str(item_positions[i]), "SuddenDeathMinigame")
 
 func _start_game() -> void:
 	game_active = true
@@ -167,7 +167,7 @@ func _start_game() -> void:
 	_update_game_timer_display()
 	
 	EventBus.round_started.emit()
-	print("Sudden death game started with ", players.size(), " players!")
+	Logger.game_flow("Sudden death game started with " + str(players.size()) + " players!", "SuddenDeathMinigame")
 
 func _check_victory_condition() -> void:
 	# Count alive players
@@ -203,7 +203,7 @@ func _end_game() -> void:
 	}
 	
 	EventBus.minigame_ended.emit(winner_id, results)
-	print("Game ended! Winner: ", winner_name, " (Duration: ", game_timer, "s)") 
+	Logger.game_flow("Game ended! Winner: " + winner_name + " (Duration: " + str(game_timer) + "s)", "SuddenDeathMinigame") 
 
 ## Handle respawn timers and processing
 func _handle_respawns(delta: float) -> void:
@@ -227,7 +227,7 @@ func _handle_respawns(delta: float) -> void:
 func _on_player_died(player_id: int) -> void:
 	var player_data = GameManager.get_player_data(player_id)
 	if player_data and player_data.current_lives > 0:
-		print("⏳ Starting respawn process for Player ", player_id, " in ", respawn_delay, " seconds")
+		Logger.game_flow("Starting respawn process for Player " + str(player_id) + " in " + str(respawn_delay) + " seconds", "SuddenDeathMinigame")
 		dead_players[player_id] = respawn_delay
 		
 		# Make player invisible during respawn
@@ -235,27 +235,27 @@ func _on_player_died(player_id: int) -> void:
 		if player:
 			player.visible = false
 	else:
-		print("💀 Player ", player_id, " is out of lives - no respawn")
+		Logger.game_flow("Player " + str(player_id) + " is out of lives - no respawn", "SuddenDeathMinigame")
 
 ## Handle player damage reports from weapons
 func _on_player_damage_reported(victim_id: int, attacker_id: int, damage: int, weapon_name: String) -> void:
-	print("🎮 Minigame received damage: Player ", attacker_id, " hit Player ", victim_id, " with ", weapon_name, " for ", damage, " damage")
+	Logger.combat("Minigame received damage: Player " + str(attacker_id) + " hit Player " + str(victim_id) + " with " + weapon_name + " for " + str(damage) + " damage", "SuddenDeathMinigame")
 	
 	var victim_player = _get_player_by_id(victim_id)
 	var victim_data = GameManager.get_player_data(victim_id)
 	
 	if not victim_player or not victim_data:
-		print("❌ Invalid victim player for damage: ", victim_id)
+		Logger.warning("Invalid victim player for damage: " + str(victim_id), "SuddenDeathMinigame")
 		return
 	
 	# Only process damage for living players
 	if victim_player.current_state == BasePlayer.PlayerState.DEAD:
-		print("❌ Attempted to damage dead player: ", victim_id)
+		Logger.warning("Attempted to damage dead player: " + str(victim_id), "SuddenDeathMinigame")
 		return
 	
 	# Calculate new health
 	var new_health = max(0, victim_data.current_health - damage)
-	print("   Health change: ", victim_data.current_health, " -> ", new_health)
+	Logger.combat("Health change: " + str(victim_data.current_health) + " -> " + str(new_health), "SuddenDeathMinigame")
 	
 	# Update player data
 	victim_data.current_health = new_health
@@ -278,7 +278,7 @@ func _handle_player_death(player_id: int) -> void:
 	if not player or not player_data:
 		return
 	
-	print("💀 Minigame handling death of Player ", player_id)
+	Logger.game_flow("Minigame handling death of Player " + str(player_id), "SuddenDeathMinigame")
 	
 	# Update player data
 	player_data.current_lives -= 1
@@ -318,9 +318,9 @@ func _respawn_player(player_id: int) -> void:
 		EventBus.emit_player_health_changed(player_id, player_data.current_health)
 		
 		dead_players.erase(player_id)
-		print("✅ Player ", player_id, " respawned by minigame at ", respawn_position, " with ", player_data.current_health, " health")
+		Logger.game_flow("Player " + str(player_id) + " respawned by minigame at " + str(respawn_position) + " with " + str(player_data.current_health) + " health", "SuddenDeathMinigame")
 	else:
-		print("❌ Cannot respawn Player ", player_id, " - no player found or no respawn points")
+		Logger.warning("Cannot respawn Player " + str(player_id) + " - no player found or no respawn points", "SuddenDeathMinigame")
 
 ## Get player instance by ID
 func _get_player_by_id(player_id: int) -> BasePlayer:

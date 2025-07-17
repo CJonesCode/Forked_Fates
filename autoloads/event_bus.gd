@@ -41,7 +41,7 @@ signal network_state_synced(game_state: Dictionary)
 func _ready() -> void:
 	# Set process mode to always so EventBus works even when game is paused
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	print("EventBus initialized")
+	Logger.system("EventBus initialized", "EventBus")
 
 ## Emit a player health change event
 func emit_player_health_changed(player_id: int, new_health: int) -> void:

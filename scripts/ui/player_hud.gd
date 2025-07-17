@@ -35,15 +35,15 @@ func _ready() -> void:
 	_create_player_panels()
 	
 	# Debug UI visibility and positioning
-	print("PlayerHUD scene tree position: ", get_path())
-	print("PlayerHUD visible: ", visible)
-	print("PlayerHUD layer: ", layer)
-	print("PlayerHUD container: ", hud_container)
+	Logger.debug("PlayerHUD scene tree position: " + str(get_path()), "PlayerHUD")
+	Logger.debug("PlayerHUD visible: " + str(visible), "PlayerHUD")
+	Logger.debug("PlayerHUD layer: " + str(layer), "PlayerHUD")
+	Logger.debug("PlayerHUD container: " + str(hud_container), "PlayerHUD")
 	if hud_container:
-		print("HUDContainer children: ", hud_container.get_child_count())
-		print("HUDContainer visible: ", hud_container.visible)
+		Logger.debug("HUDContainer children: " + str(hud_container.get_child_count()), "PlayerHUD")
+		Logger.debug("HUDContainer visible: " + str(hud_container.visible), "PlayerHUD")
 	
-	print("PlayerHUD initialized with lives and health percentage display")
+	Logger.system("PlayerHUD initialized with lives and health percentage display", "PlayerHUD")
 
 ## Create UI panels for all players
 func _create_player_panels() -> void:
@@ -60,11 +60,11 @@ func _create_player_panels() -> void:
 			hud_container.add_child(panel)
 			player_panels.append(panel)
 	
-	print("Created ", player_panels.size(), " player panels")
+	Logger.debug("Created " + str(player_panels.size()) + " player panels", "PlayerHUD")
 
 ## Create individual player panel with lives and health percentage
 func _create_player_panel(player_data: PlayerData, player_id: int) -> Control:
-	print("   📋 Creating panel for ", player_data.player_name)
+	Logger.debug("Creating panel for " + player_data.player_name, "PlayerHUD")
 	var panel = PanelContainer.new()
 	panel.name = "Player" + str(player_id) + "Panel"
 	
@@ -165,13 +165,13 @@ func _create_player_panel(player_data: PlayerData, player_id: int) -> Control:
 ## Update player health display
 func _update_player_health(player_id: int, new_health: int) -> void:
 	if player_id >= player_panels.size():
-		print("❌ Health update: Player ID ", player_id, " out of range! Panel count: ", player_panels.size())
+		Logger.warning("Health update: Player ID " + str(player_id) + " out of range! Panel count: " + str(player_panels.size()), "PlayerHUD")
 		return
 	
 	var panel = player_panels[player_id]
 	var player_data = GameManager.get_player_data(player_id)
 	if not player_data:
-		print("❌ Health update: No player data for ", player_id)
+		Logger.warning("Health update: No player data for " + str(player_id), "PlayerHUD")
 		return
 	
 	print("🔧 Updating health for Player ", player_id, ": ", player_data.current_health, "/", player_data.max_health, " = ", player_data.get_health_percentage(), "%")
@@ -239,7 +239,7 @@ func _update_player_health(player_id: int, new_health: int) -> void:
 ## Update player lives display
 func _update_player_lives(player_id: int, new_lives: int) -> void:
 	if player_id >= player_panels.size():
-		print("❌ Lives update: Player ID ", player_id, " out of range! Panel count: ", player_panels.size())
+		Logger.warning("Lives update: Player ID " + str(player_id) + " out of range! Panel count: " + str(player_panels.size()), "PlayerHUD")
 		return
 	
 	var panel = player_panels[player_id]

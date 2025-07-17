@@ -15,7 +15,7 @@ func _ready() -> void:
 	# TODO: Load and display actual map
 	_setup_placeholder_ui()
 	
-	print("Map view loaded")
+	Logger.system("Map view loaded", "MapView")
 
 func _setup_placeholder_ui() -> void:
 	# Temporary placeholder until map system is implemented
@@ -26,10 +26,10 @@ func _setup_placeholder_ui() -> void:
 	map_container.add_child(placeholder_label)
 
 func _on_back_button_pressed() -> void:
-	print("Returning to main menu...")
+	Logger.game_flow("Returning to main menu", "MapView")
 	EventBus.request_scene_transition("res://scenes/ui/main_menu.tscn")
 	GameManager.change_state(GameManager.GameState.MENU)
 
 func _on_test_minigame_button_pressed() -> void:
-	print("Starting test minigame...")
+	Logger.game_flow("Starting test minigame", "MapView")
 	GameManager.start_minigame("sudden_death") 

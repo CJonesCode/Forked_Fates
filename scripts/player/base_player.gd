@@ -82,9 +82,9 @@ func _ready() -> void:
 	# Initialize player data
 	if not player_data:
 		player_data = PlayerData.new(0, "Player")
-		print("⚠️ BasePlayer created default PlayerData - this should only happen in standalone testing")
+		Logger.warning("BasePlayer created default PlayerData - this should only happen in standalone testing", "BasePlayer")
 	else:
-		print("✅ BasePlayer using assigned PlayerData: ", player_data.player_name, " (ID: ", player_data.player_id, ")")
+		Logger.system("BasePlayer using assigned PlayerData: " + player_data.player_name + " (ID: " + str(player_data.player_id) + ")", "BasePlayer")
 	
 	# Set collision layers for player
 	CollisionLayers.setup_player(self)
@@ -99,7 +99,7 @@ func _ready() -> void:
 	health_changed.connect(_on_health_changed)
 	player_state_changed.connect(_on_state_changed)
 	
-	print("BasePlayer initialized: ", player_data.player_name)
+	Logger.system("BasePlayer initialized: " + player_data.player_name, "BasePlayer")
 
 func _physics_process(delta: float) -> void:
 	match current_state:
@@ -174,7 +174,7 @@ func set_input(movement: Vector2, jump: bool, use: bool) -> void:
 	use_pressed = use
 	
 	# Update facing direction based on movement (Duck Game style)
-	var old_facing = facing_direction
+	var old_facing: int = facing_direction
 	if movement.x > 0:
 		facing_direction = 1  # Right
 		sprite.scale.x = abs(sprite.scale.x)  # Face right
@@ -185,10 +185,10 @@ func set_input(movement: Vector2, jump: bool, use: bool) -> void:
 	
 	# Debug facing direction changes and update held item
 	if old_facing != facing_direction:
-		print("👤 ", player_data.player_name, " facing changed: ", old_facing, " -> ", facing_direction)
+		Logger.debug(player_data.player_name + " facing changed: " + str(old_facing) + " -> " + str(facing_direction), "BasePlayer")
 		# Update held item position immediately when facing changes
 		if held_item and held_item is BaseItem:
-			var item = held_item as BaseItem
+			var item: BaseItem = held_item as BaseItem
 			# Safety check: only update if item is actually held
 			if item.is_held and item.holder == self and item.has_method("_update_held_position"):
 				item._update_held_position()
@@ -197,7 +197,7 @@ func set_input(movement: Vector2, jump: bool, use: bool) -> void:
 func set_health(new_health: int) -> void:
 	current_health = new_health
 	player_data.current_health = new_health
-	print("❤️ ", player_data.player_name, " health set to: ", current_health)
+	Logger.player(player_data.player_name, "health set to: " + str(current_health), "BasePlayer")
 	
 	# Show damage feedback if health decreased
 	if current_health < max_health:
@@ -205,7 +205,7 @@ func set_health(new_health: int) -> void:
 
 ## Die (called by minigame)
 func die() -> void:
-	print("💀 ", player_data.player_name, " dying on minigame command...")
+	Logger.player(player_data.player_name, "dying on minigame command", "BasePlayer")
 	current_state = PlayerState.DEAD
 	player_state_changed.emit(current_state)
 	
@@ -216,11 +216,11 @@ func die() -> void:
 func _enter_death_ragdoll() -> void:
 	# Drop held item before entering ragdoll state
 	if held_item and held_item is BaseItem:
-		var item = held_item as BaseItem
-		print("💥 ", player_data.player_name, " drops ", item.item_name, " due to death!")
+		var item: BaseItem = held_item as BaseItem
+		Logger.item(item.item_name, "dropped by " + player_data.player_name + " due to death", "BasePlayer")
 		
 		# Create dramatic drop velocity based on current movement
-		var drop_velocity = velocity * game_config.item_velocity_inheritance
+		var drop_velocity: Vector2 = velocity * game_config.item_velocity_inheritance
 		drop_velocity.y -= game_config.item_drop_upward_force * 1.5  # Extra upward force
 		
 		# Add some random horizontal spread for chaos
@@ -228,9 +228,9 @@ func _enter_death_ragdoll() -> void:
 		
 		if item.drop(drop_velocity):
 			held_item = null
-			print("✅ ", player_data.player_name, " death drop successful")
+			Logger.debug(player_data.player_name + " death drop successful", "BasePlayer")
 		else:
-			print("❌ ", player_data.player_name, " death drop failed")
+			Logger.warning(player_data.player_name + " death drop failed", "BasePlayer")
 	
 	# Create death ragdoll effect (don't change state - already DEAD)
 	ragdoll_timer = 0.0
@@ -240,11 +240,11 @@ func _enter_death_ragdoll() -> void:
 	if ragdoll_body:
 		ragdoll_body.modulate = Color(0.8, 0.3, 0.3, 1.0)  # Reddish tint for death
 	
-	print(player_data.player_name, " entered death ragdoll state")
+	Logger.player(player_data.player_name, "entered death ragdoll state", "BasePlayer")
 
 ## Take damage and update health (DEPRECATED - kept for compatibility)
 func take_damage(damage: int, source: Node = null) -> void:
-	print("⚠️ DEPRECATED: take_damage called on ", player_data.player_name, " - should use minigame damage system")
+	Logger.warning("DEPRECATED: take_damage called on " + player_data.player_name + " - should use minigame damage system", "BasePlayer")
 	if current_state == PlayerState.DEAD:
 		return
 	
@@ -259,7 +259,7 @@ func take_damage(damage: int, source: Node = null) -> void:
 
 ## Heal the player (DEPRECATED - kept for compatibility)
 func heal(amount: int) -> void:
-	print("⚠️ DEPRECATED: heal called on ", player_data.player_name, " - should use minigame healing system")
+	Logger.warning("DEPRECATED: heal called on " + player_data.player_name + " - should use minigame healing system", "BasePlayer")
 	if current_state == PlayerState.DEAD:
 		return
 		
@@ -273,11 +273,11 @@ func _enter_ragdoll_state() -> void:
 	
 	# Drop held item before entering ragdoll state
 	if held_item and held_item is BaseItem:
-		var item = held_item as BaseItem
-		print("💥 ", player_data.player_name, " drops ", item.item_name, " due to ragdoll!")
+		var item: BaseItem = held_item as BaseItem
+		Logger.item(item.item_name, "dropped by " + player_data.player_name + " due to ragdoll", "BasePlayer")
 		
 		# Create dramatic drop velocity based on current movement
-		var drop_velocity = velocity * game_config.item_velocity_inheritance
+		var drop_velocity: Vector2 = velocity * game_config.item_velocity_inheritance
 		drop_velocity.y -= game_config.item_drop_upward_force * 1.5  # Extra upward force for ragdoll drops
 		
 		# Add some random horizontal spread for chaos
@@ -285,9 +285,9 @@ func _enter_ragdoll_state() -> void:
 		
 		if item.drop(drop_velocity):
 			held_item = null
-			print("✅ ", player_data.player_name, " ragdoll drop successful")
+			Logger.debug(player_data.player_name + " ragdoll drop successful", "BasePlayer")
 		else:
-			print("❌ ", player_data.player_name, " ragdoll drop failed")
+			Logger.warning(player_data.player_name + " ragdoll drop failed", "BasePlayer")
 		
 	current_state = PlayerState.RAGDOLLED
 	ragdoll_timer = 0.0
@@ -295,7 +295,7 @@ func _enter_ragdoll_state() -> void:
 	
 	# Create simple ragdoll effect
 	_create_ragdoll_body()
-	print(player_data.player_name, " entered ragdoll state")
+	Logger.player(player_data.player_name, "entered ragdoll state", "BasePlayer")
 
 ## Exit ragdoll state
 func _exit_ragdoll_state() -> void:
@@ -307,7 +307,7 @@ func _exit_ragdoll_state() -> void:
 	
 	# Remove ragdoll body
 	_remove_ragdoll_body()
-	print(player_data.player_name, " recovered from ragdoll")
+	Logger.player(player_data.player_name, "recovered from ragdoll", "BasePlayer")
 
 ## Create Duck Game style ragdoll physics body
 func _create_ragdoll_body() -> void:
@@ -391,7 +391,7 @@ func _create_ragdoll_body() -> void:
 	var top_offset = Vector2(0, -20)
 	ragdoll_body.apply_impulse(base_tipping_force, top_offset)
 	
-	print("Applied tipping force ", base_tipping_force, " at offset ", top_offset)
+	Logger.debug("Applied tipping force " + str(base_tipping_force) + " at offset " + str(top_offset), "BasePlayer")
 	
 	# Disable item interactions during ragdoll
 	can_pickup = false
@@ -401,7 +401,7 @@ func _create_ragdoll_body() -> void:
 	# DON'T disable physics processing - we need it for the recovery timer!
 	# set_physics_process(false)  # <- This was preventing recovery!
 	
-	print(player_data.player_name, " entered Duck Game style ragdoll")
+	Logger.player(player_data.player_name, "entered Duck Game style ragdoll", "BasePlayer")
 
 ## Remove ragdoll body and restore normal physics
 func _remove_ragdoll_body() -> void:
@@ -420,7 +420,7 @@ func _remove_ragdoll_body() -> void:
 	if held_item and held_item is BaseItem:
 		var item = held_item as BaseItem
 		item.visible = true
-		print("👁️ Ensured held item ", item.item_name, " is visible after ragdoll recovery")
+		Logger.debug("Ensured held item " + item.item_name + " is visible after ragdoll recovery", "BasePlayer")
 	
 	# Re-enable item interactions
 	can_pickup = true
@@ -431,16 +431,16 @@ func _remove_ragdoll_body() -> void:
 	visible = true
 	set_physics_process(true)
 	
-	print(player_data.player_name, " recovered from ragdoll")
+	Logger.player(player_data.player_name, "recovered from ragdoll", "BasePlayer")
 
 ## Player death (DEPRECATED - use die() instead)
 func _die() -> void:
-	print("⚠️ DEPRECATED: _die called - using new die() method")
+	Logger.warning("DEPRECATED: _die called - using new die() method", "BasePlayer")
 	die()
 
 ## Respawn the player (called by minigame)
 func respawn() -> void:
-	print("🔄 Respawning ", player_data.player_name, " at ", spawn_position)
+	Logger.player(player_data.player_name, "respawning at " + str(spawn_position), "BasePlayer")
 	
 	# Clean up any death ragdoll state first
 	_cleanup_ragdoll_state()
@@ -466,12 +466,12 @@ func respawn() -> void:
 	# Emit respawn event
 	EventBus.emit_player_respawned(player_data.player_id)
 	
-	print("✅ ", player_data.player_name, " respawned successfully!")
+	Logger.player(player_data.player_name, "respawned successfully!", "BasePlayer")
 
 ## Set spawn position (called by minigame)
 func set_spawn_position(position: Vector2) -> void:
 	spawn_position = position
-	print("📍 Set spawn position for ", player_data.player_name, " to ", spawn_position)
+	Logger.system("Set spawn position for " + player_data.player_name + " to " + str(spawn_position), "BasePlayer")
 
 ## Clean up ragdoll state variables and body
 func _cleanup_ragdoll_state() -> void:
@@ -499,7 +499,7 @@ func _update_ui() -> void:
 ## Show damage feedback
 func _show_damage_feedback() -> void:
 	# TODO: Add visual/audio feedback for taking damage
-	print(player_data.player_name, " took damage! Health: ", current_health)
+	Logger.combat(player_data.player_name + " took damage! Health: " + str(current_health), "BasePlayer")
 
 ## Attempt to pick up an item (specific item)
 func try_pickup_item(item: BaseItem) -> bool:
@@ -518,19 +518,19 @@ func try_pickup_item(item: BaseItem) -> bool:
 
 ## Attempt to pick up the nearest available item
 func try_pickup_nearest_item() -> bool:
-	print("🎯 ", player_data.player_name, " attempting pickup...")
+	Logger.pickup(player_data.player_name + " attempting pickup", "BasePlayer")
 	
 	if not can_pickup or held_item != null or current_state != PlayerState.ALIVE:
-		print("   ❌ Cannot pickup: can_pickup=", can_pickup, " held_item=", held_item, " state=", current_state)
+		Logger.pickup("Cannot pickup: can_pickup=" + str(can_pickup) + " held_item=" + str(held_item) + " state=" + str(current_state), "BasePlayer")
 		return false
 	
-	print("   📦 Nearby items: ", nearby_items.size())
+	Logger.pickup("Nearby items: " + str(nearby_items.size()), "BasePlayer")
 	for i in range(nearby_items.size()):
 		var item = nearby_items[i]
 		if item:
-			print("     [", i, "] ", item.item_name, " at ", item.global_position, " can_pickup=", item.can_be_picked_up, " is_held=", item.is_held)
+			Logger.pickup("[" + str(i) + "] " + item.item_name + " at " + str(item.global_position) + " can_pickup=" + str(item.can_be_picked_up) + " is_held=" + str(item.is_held), "BasePlayer")
 		else:
-			print("     [", i, "] null item (stale reference)")
+			Logger.pickup("[" + str(i) + "] null item (stale reference)", "BasePlayer")
 	
 	# Find the nearest pickupable item
 	var nearest_item: BaseItem = null
@@ -539,17 +539,17 @@ func try_pickup_nearest_item() -> bool:
 	for item in nearby_items:
 		if item and item.can_be_picked_up and not item.is_held:
 			var distance = global_position.distance_to(item.global_position)
-			print("     -> Distance to ", item.item_name, ": ", distance)
+			Logger.pickup("Distance to " + item.item_name + ": " + str(distance), "BasePlayer")
 			if distance < nearest_distance:
 				nearest_distance = distance
 				nearest_item = item
 	
 	# Try to pick up the nearest item
 	if nearest_item:
-		print("   ✅ Picking up nearest item: ", nearest_item.item_name, " (distance: ", nearest_distance, ")")
+		Logger.pickup("Picking up nearest item: " + nearest_item.item_name + " (distance: " + str(nearest_distance) + ")", "BasePlayer")
 		return try_pickup_item(nearest_item)
 	else:
-		print("   ❌ No pickupable items found")
+		Logger.pickup("No pickupable items found", "BasePlayer")
 	
 	return false
 
@@ -560,16 +560,16 @@ func drop_item() -> void:
 	
 	if held_item and held_item is BaseItem:
 		var item = held_item as BaseItem
-		print("💧 ", player_data.player_name, " dropping ", item.item_name)
+		Logger.item(item.item_name, "being dropped by " + player_data.player_name, "BasePlayer")
 		
 		var drop_velocity = velocity * game_config.item_velocity_inheritance
 		drop_velocity.y -= game_config.item_drop_upward_force
 		
 		if item.drop(drop_velocity):
 			held_item = null
-			print("✅ ", player_data.player_name, " held_item set to null")
+			Logger.debug(player_data.player_name + " held_item set to null", "BasePlayer")
 		else:
-			print("❌ ", player_data.player_name, " failed to drop ", item.item_name)
+			Logger.warning(player_data.player_name + " failed to drop " + item.item_name, "BasePlayer")
 
 ## Use currently held item
 func use_held_item() -> bool:
@@ -584,15 +584,15 @@ func use_held_item() -> bool:
 # Signal handlers
 func _on_health_changed(new_health: int) -> void:
 	# DEPRECATED: Health changes are now managed by minigame
-	print("⚠️ DEPRECATED: _on_health_changed called - health now managed by minigame")
+	Logger.warning("DEPRECATED: _on_health_changed called - health now managed by minigame", "BasePlayer")
 	
 	# Still update local player data for consistency
 	player_data.current_health = new_health
-	print("   PlayerData synced: ", player_data.current_health, "/", player_data.max_health, " = ", player_data.get_health_percentage(), "%")
+	Logger.debug("PlayerData synced: " + str(player_data.current_health) + "/" + str(player_data.max_health) + " = " + str(player_data.get_health_percentage()) + "%", "BasePlayer")
 
 func _on_state_changed(new_state: PlayerState) -> void:
 	# Individual UI removed, but still handle state changes
-	print("🔄 BasePlayer ", player_data.player_name, " state changed to: ", PlayerState.keys()[new_state])
+	Logger.player(player_data.player_name, "state changed to: " + PlayerState.keys()[new_state], "BasePlayer")
 	
 	match new_state:
 		PlayerState.RAGDOLLED:
@@ -604,27 +604,27 @@ func _on_state_changed(new_state: PlayerState) -> void:
 
 # Pickup area signal handlers
 func _on_pickup_area_entered(body: Node2D) -> void:
-	print("🔍 ", player_data.player_name, " pickup area detected body: ", body.name, " type: ", body.get_class())
+	Logger.pickup(player_data.player_name + " pickup area detected body: " + body.name + " type: " + body.get_class(), "BasePlayer")
 	if body is BaseItem:
 		var item = body as BaseItem
-		print("   -> Found BaseItem: ", item.item_name, " can_pickup=", item.can_be_picked_up, " is_held=", item.is_held)
+		Logger.pickup("Found BaseItem: " + item.item_name + " can_pickup=" + str(item.can_be_picked_up) + " is_held=" + str(item.is_held), "BasePlayer")
 		if item.can_be_picked_up and not item.is_held and item not in nearby_items:
 			nearby_items.append(item)
-			print("   ✅ ", player_data.player_name, " can now pickup: ", item.item_name, " (total nearby: ", nearby_items.size(), ")")
+			Logger.pickup(player_data.player_name + " can now pickup: " + item.item_name + " (total nearby: " + str(nearby_items.size()) + ")", "BasePlayer")
 		else:
-			print("   ❌ Cannot pickup ", item.item_name, " - already in list or not available")
+			Logger.pickup("Cannot pickup " + item.item_name + " - already in list or not available", "BasePlayer")
 	else:
-		print("   -> Not a BaseItem, ignoring")
+		Logger.pickup("Not a BaseItem, ignoring", "BasePlayer")
 
 func _on_pickup_area_exited(body: Node2D) -> void:
-	print("🚪 ", player_data.player_name, " pickup area lost body: ", body.name)
+	Logger.pickup(player_data.player_name + " pickup area lost body: " + body.name, "BasePlayer")
 	if body is BaseItem:
 		var item = body as BaseItem
 		if item in nearby_items:
 			nearby_items.erase(item)
-			print("   ✅ ", player_data.player_name, " lost pickup range for: ", item.item_name, " (remaining: ", nearby_items.size(), ")")
+			Logger.pickup(player_data.player_name + " lost pickup range for: " + item.item_name + " (remaining: " + str(nearby_items.size()) + ")", "BasePlayer")
 		else:
-			print("   ❌ Item ", item.item_name, " was not in nearby list")
+			Logger.pickup("Item " + item.item_name + " was not in nearby list", "BasePlayer")
 
 ## Create pickup area for item detection
 func _create_pickup_area() -> void:
@@ -649,4 +649,4 @@ func _create_pickup_area() -> void:
 	
 	# Debug collision setup
 	CollisionLayers.debug_collision_setup(pickup_area, player_data.player_name + " pickup area")
-	print("Created pickup area for ", player_data.player_name) 
+	Logger.system("Created pickup area for " + player_data.player_name, "BasePlayer") 

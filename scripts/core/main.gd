@@ -15,9 +15,9 @@ extends Node
 @onready var scene_container: Node = $SceneContainer
 
 # Preload common scenes for better performance
-var main_menu_scene = preload("res://scenes/ui/main_menu.tscn")
-var map_view_scene = preload("res://scenes/ui/map_view.tscn")
-var sudden_death_minigame_scene = preload("res://scenes/minigames/sudden_death_minigame.tscn")
+var main_menu_scene: PackedScene = preload("res://scenes/ui/main_menu.tscn")
+var map_view_scene: PackedScene = preload("res://scenes/ui/map_view.tscn")
+var sudden_death_minigame_scene: PackedScene = preload("res://scenes/minigames/sudden_death_minigame.tscn")
 
 func _ready() -> void:
 	# Connect to EventBus for scene transitions
@@ -25,11 +25,11 @@ func _ready() -> void:
 	
 	# Start with main menu
 	_load_initial_scene()
-	print("Main scene initialized")
+	Logger.system("Main scene initialized", "Main")
 
 func _load_initial_scene() -> void:
 	# Load the main menu as the first scene
-	var main_menu_instance = main_menu_scene.instantiate()
+	var main_menu_instance: Node = main_menu_scene.instantiate()
 	scene_container.add_child(main_menu_instance)
 	
 	GameManager.change_state(GameManager.GameState.MENU)
@@ -57,19 +57,19 @@ func _on_scene_transition_requested(scene_path: String) -> void:
 			scene_instance = sudden_death_minigame_scene.instantiate()
 		_:
 			# Fallback to load() for other scenes
-			var new_scene = load(scene_path)
+			var new_scene: PackedScene = load(scene_path)
 			if new_scene:
 				scene_instance = new_scene.instantiate()
 	
 	if scene_instance:
 		scene_container.add_child(scene_instance)
-		print("Loaded scene: ", scene_path)
+		Logger.system("Loaded scene: " + scene_path, "Main")
 	else:
-		print("Failed to load scene: ", scene_path) 
+		Logger.error("Failed to load scene: " + scene_path, "Main") 
 
 ## Clean up dropped items during scene transitions
 func _cleanup_dropped_items() -> void:
-	print("🧹 Cleaning up dropped items and projectiles during scene transition...")
+	Logger.system("Cleaning up dropped items and projectiles during scene transition", "Main")
 	
 	# Find all items and projectiles in the scene 
 	var items_to_cleanup: Array[BaseItem] = []
@@ -79,16 +79,16 @@ func _cleanup_dropped_items() -> void:
 	# Clean up found items (only if not held)
 	for item in items_to_cleanup:
 		if item and is_instance_valid(item) and not item.is_held:
-			print("   🗑️ Cleaning up dropped item: ", item.item_name)
+			Logger.debug("Cleaning up dropped item: " + item.item_name, "Main")
 			item.queue_free()
 	
 	# Clean up projectiles (bullets, etc.)
 	for projectile in projectiles_to_cleanup:
 		if projectile and is_instance_valid(projectile):
-			print("   💥 Cleaning up projectile: ", projectile.get_class())
+			Logger.debug("Cleaning up projectile: " + projectile.get_class(), "Main")
 			projectile.queue_free()
 	
-	print("✅ Cleaned up ", items_to_cleanup.size(), " dropped items and ", projectiles_to_cleanup.size(), " projectiles")
+	Logger.system("Cleaned up " + str(items_to_cleanup.size()) + " dropped items and " + str(projectiles_to_cleanup.size()) + " projectiles", "Main")
 
 ## Recursively find all cleanup nodes in the scene tree
 func _find_cleanup_nodes_recursive(node: Node, items: Array[BaseItem], projectiles: Array[Node]) -> void:

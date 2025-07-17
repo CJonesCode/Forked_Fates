@@ -43,7 +43,7 @@ func _ready() -> void:
 	
 	# Initialize session
 	_initialize_session()
-	print("GameManager initialized")
+	Logger.system("GameManager initialized", "GameManager")
 
 ## Initialize a new game session
 func _initialize_session() -> void:
@@ -67,17 +67,17 @@ func _generate_session_id() -> String:
 ## Add a player to the session
 func add_player(player_id: int, player_name: String) -> bool:
 	if players.size() >= max_players:
-		print("Cannot add player: session full")
+		Logger.warning("Cannot add player: session full", "GameManager")
 		return false
 	
 	if players.has(player_id):
-		print("Player ID already exists: ", player_id)
+		Logger.warning("Player ID already exists: " + str(player_id), "GameManager")
 		return false
 	
-	var player_data = PlayerData.new(player_id, player_name)
+	var player_data: PlayerData = PlayerData.new(player_id, player_name)
 	
 	players[player_id] = player_data
-	print("Added player: ", player_name, " (ID: ", player_id, ")")
+	Logger.system("Added player: " + player_name + " (ID: " + str(player_id) + ")", "GameManager")
 	return true
 
 ## Remove a player from the session
@@ -86,7 +86,7 @@ func remove_player(player_id: int) -> bool:
 		return false
 	
 	players.erase(player_id)
-	print("Removed player ID: ", player_id)
+	Logger.system("Removed player ID: " + str(player_id), "GameManager")
 	return true
 
 ## Get player data by ID
@@ -95,7 +95,7 @@ func get_player_data(player_id: int) -> PlayerData:
 
 ## Update player health (internal - doesn't emit events to avoid loops)
 func update_player_health(player_id: int, new_health: int) -> void:
-	var player_data = get_player_data(player_id)
+	var player_data: PlayerData = get_player_data(player_id)
 	if player_data:
 		player_data.current_health = clamp(new_health, 0, player_data.max_health)
 		player_data.is_alive = player_data.current_health > 0
@@ -108,7 +108,7 @@ func change_state(new_state: GameState) -> void:
 	
 	previous_state = current_state
 	current_state = new_state
-	print("Game state changed: ", GameState.keys()[previous_state], " -> ", GameState.keys()[current_state])
+	Logger.game_flow("Game state changed: " + GameState.keys()[previous_state] + " -> " + GameState.keys()[current_state], "GameManager")
 
 ## Start a minigame
 func start_minigame(minigame_type: String) -> void:
@@ -120,7 +120,7 @@ func start_minigame(minigame_type: String) -> void:
 		"sudden_death":
 			EventBus.request_scene_transition("res://scenes/minigames/sudden_death_minigame.tscn")
 		_:
-			print("Unknown minigame type: ", minigame_type)
+			Logger.warning("Unknown minigame type: " + minigame_type, "GameManager")
 			# Fallback to map view if unknown minigame
 			change_state(GameState.MAP_VIEW)
 			EventBus.request_scene_transition("res://scenes/ui/map_view.tscn")
@@ -141,31 +141,31 @@ func check_game_end_condition() -> bool:
 
 # Signal handlers
 func _on_player_died(player_id: int) -> void:
-	var player_data = get_player_data(player_id)
+	var player_data: PlayerData = get_player_data(player_id)
 	if player_data:
 		player_data.is_alive = false
 		player_data.current_health = 0
-		print("Player died: ", player_data.player_name)
+		Logger.game_flow("Player died: " + player_data.player_name, "GameManager")
 
 func _on_player_health_changed(player_id: int, new_health: int) -> void:
-	print("🎮 GameManager received health change for Player ", player_id, ": ", new_health)
-	var player_data = get_player_data(player_id)
+	Logger.debug("GameManager received health change for Player " + str(player_id) + ": " + str(new_health), "GameManager")
+	var player_data: PlayerData = get_player_data(player_id)
 	if player_data:
-		var old_health = player_data.current_health
-		print("   GameManager PlayerData before: ", old_health, "/", player_data.max_health)
+		var old_health: int = player_data.current_health
+		Logger.debug("GameManager PlayerData before: " + str(old_health) + "/" + str(player_data.max_health), "GameManager")
 		update_player_health(player_id, new_health)
-		print("   GameManager PlayerData after: ", player_data.current_health, "/", player_data.max_health, " = ", player_data.get_health_percentage(), "%")
+		Logger.debug("GameManager PlayerData after: " + str(player_data.current_health) + "/" + str(player_data.max_health) + " = " + str(player_data.get_health_percentage()) + "%", "GameManager")
 	else:
-		print("   ❌ GameManager: No player data found for Player ", player_id)
+		Logger.warning("GameManager: No player data found for Player " + str(player_id), "GameManager")
 
 func _on_player_lives_changed(player_id: int, new_lives: int) -> void:
-	var player_data = get_player_data(player_id)
+	var player_data: PlayerData = get_player_data(player_id)
 	if player_data:
 		player_data.current_lives = new_lives
-		print("Player ", player_data.player_name, " lives updated: ", new_lives)
+		Logger.game_flow("Player " + player_data.player_name + " lives updated: " + str(new_lives), "GameManager")
 
 func _on_minigame_ended(winner_id: int, results: Dictionary) -> void:
-	print("Minigame ended. Winner: ", winner_id)
+	Logger.game_flow("Minigame ended. Winner: " + str(winner_id), "GameManager")
 	current_minigame = ""
 	# Return to map view
 	change_state(GameState.MAP_VIEW) 

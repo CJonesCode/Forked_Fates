@@ -65,7 +65,7 @@ static func disable_all_collisions(body: CollisionObject2D) -> void:
 	
 	# Also disable contact monitoring for RigidBody2D (deferred to avoid callback conflicts)
 	if body is RigidBody2D:
-		var rigid_body = body as RigidBody2D
+		var rigid_body: RigidBody2D = body as RigidBody2D
 		rigid_body.call_deferred("set_contact_monitor", false)
 
 ## Setup player collision (alive state)
@@ -119,7 +119,7 @@ static func get_layer_name(layer: int) -> String:
 
 ## Debug collision setup
 static func debug_collision_setup(body: CollisionObject2D, name: String = "") -> void:
-	var body_name = name if name != "" else str(body)
-	print("🔍 Collision Debug for %s:" % body_name)
-	print("   Layer: %s (%d)" % [get_layer_name(body.collision_layer), body.collision_layer])
-	print("   Mask:  %s (%d)" % [get_layer_name(body.collision_mask), body.collision_mask]) 
+	var body_name: String = name if name != "" else str(body)
+	Logger.debug("Collision Debug for " + body_name, "CollisionLayers")
+	Logger.debug("Layer: " + get_layer_name(body.collision_layer) + " (" + str(body.collision_layer) + ")", "CollisionLayers")
+	Logger.debug("Mask: " + get_layer_name(body.collision_mask) + " (" + str(body.collision_mask) + ")", "CollisionLayers") 

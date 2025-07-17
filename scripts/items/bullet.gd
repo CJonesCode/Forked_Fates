@@ -30,7 +30,7 @@ func _ready() -> void:
 	# Connect collision signal (RigidBody2D uses body_shape_entered)
 	body_shape_entered.connect(_on_body_shape_entered)
 	
-	print("Bullet created")
+	Logger.debug("Bullet created", "Bullet")
 
 func _physics_process(delta: float) -> void:
 	# Update lifetime
@@ -57,7 +57,7 @@ func initialize(velocity: Vector2, bullet_damage: int, firing_player: BasePlayer
 	# Set initial velocity
 	linear_velocity = velocity_vector
 	
-	print("Bullet initialized with velocity: ", velocity, " damage: ", damage)
+	Logger.debug("Bullet initialized with velocity: " + str(velocity) + " damage: " + str(damage), "Bullet")
 
 ## Handle collision with other bodies (RigidBody2D contact monitoring)
 func _on_body_shape_entered(body_rid: RID, body: Node, body_shape_index: int, local_shape_index: int) -> void:
@@ -75,7 +75,7 @@ func _process_collision(body: Node) -> void:
 	if not has_hit:
 		return
 	
-	print("Bullet hit: ", body.name)
+	Logger.combat("Bullet hit: " + body.name, "Bullet")
 	
 	# Don't hit the shooter
 	if body == shooter:
@@ -107,9 +107,9 @@ func _process_collision(body: Node) -> void:
 			# Report damage to minigame instead of applying directly
 			var attacker_id = shooter.player_data.player_id if shooter else -1
 			EventBus.report_player_damage(hit_player.player_data.player_id, attacker_id, damage, "Bullet")
-			print("Bullet reported ", damage, " damage from Player ", attacker_id, " to ", hit_player.player_data.player_name)
+			Logger.combat("Bullet reported " + str(damage) + " damage from Player " + str(attacker_id) + " to " + hit_player.player_data.player_name, "Bullet")
 		else:
-			print("Bullet hit dead player - no damage but bullet destroyed")
+			Logger.debug("Bullet hit dead player - no damage but bullet destroyed", "Bullet")
 	
 	# Hit something, destroy bullet (always destroy on any collision)
 	_hit_target(body)
@@ -137,5 +137,5 @@ func _destroy_bullet() -> void:
 	set_deferred("linear_velocity", Vector2.ZERO)
 	set_deferred("freeze", true)
 	
-	print("Bullet destroyed")
+	Logger.debug("Bullet destroyed", "Bullet")
 	queue_free() 

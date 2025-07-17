@@ -52,7 +52,7 @@ func _ready() -> void:
 	if pickup_area:
 		CollisionLayers.debug_collision_setup(pickup_area, item_name + " pickup area")
 	
-	print("Item initialized: ", item_name)
+	Logger.item(item_name, "initialized", "BaseItem")
 
 # Note: Position updates are now handled immediately when player facing changes
 # in the player's set_input function, so no _process needed
@@ -82,7 +82,7 @@ func pickup(player: BasePlayer) -> bool:
 	item_picked_up.emit(player)
 	EventBus.emit_item_picked_up(player.player_data.player_id, item_name)
 	
-	print(player.player_data.player_name, " picked up ", item_name)
+	Logger.pickup(player.player_data.player_name + " picked up " + item_name, "BaseItem")
 	return true
 
 ## Drop this item
@@ -93,7 +93,7 @@ func drop(drop_velocity: Vector2 = Vector2.ZERO) -> bool:
 	var dropping_player = holder
 	
 	# Detach from player BEFORE resetting holder
-	print("🎯 Dropping ", item_name, " from ", dropping_player.player_data.player_name)
+	Logger.pickup("Dropping " + item_name + " from " + dropping_player.player_data.player_name, "BaseItem")
 	_detach_from_player()
 	
 	# Reset state
@@ -117,7 +117,7 @@ func drop(drop_velocity: Vector2 = Vector2.ZERO) -> bool:
 	item_dropped.emit(dropping_player)
 	EventBus.emit_item_dropped(dropping_player.player_data.player_id, item_name)
 	
-	print(dropping_player.player_data.player_name, " dropped ", item_name)
+	Logger.pickup(dropping_player.player_data.player_name + " dropped " + item_name, "BaseItem")
 	return true
 
 ## Use this item
@@ -142,7 +142,7 @@ func use_item() -> bool:
 
 ## Override this in derived classes for specific use behavior
 func _use_implementation() -> bool:
-	print(holder.player_data.player_name, " used ", item_name)
+	Logger.item(item_name, "used by " + holder.player_data.player_name, "BaseItem")
 	return true
 
 ## Override this in derived classes to define weapon-specific aiming behavior
@@ -157,7 +157,7 @@ func _get_aim_direction() -> Vector2:
 
 ## Attach item to player (visually and spatially)
 func _attach_to_player(player: BasePlayer) -> void:
-	print("🔗 Attaching ", item_name, " to ", player.player_data.player_name, " (facing: ", player.facing_direction, ")")
+	Logger.debug("Attaching " + item_name + " to " + player.player_data.player_name + " (facing: " + str(player.facing_direction) + ")", "BaseItem")
 	
 	# Remove from current parent
 	if get_parent():
@@ -170,18 +170,18 @@ func _attach_to_player(player: BasePlayer) -> void:
 	rotation = 0.0
 	
 	# Update position and visual orientation
-	print("🔄 Calling _update_held_position from attach...")
+	Logger.debug("Calling _update_held_position from attach", "BaseItem")
 	_update_held_position()
 
 ## Update held item position and orientation based on player facing
 func _update_held_position() -> void:
 	if not is_held or not holder:
-		print("⚠️ ", item_name, " _update_held_position called but not properly held (is_held=", is_held, " holder=", holder, ")")
+		Logger.warning(item_name + " _update_held_position called but not properly held (is_held=" + str(is_held) + " holder=" + str(holder) + ")", "BaseItem")
 		return
 	
 	# Additional safety check: make sure we're actually a child of the holder
 	if get_parent() != holder:
-		print("⚠️ ", item_name, " _update_held_position called but not child of holder (parent=", get_parent(), " holder=", holder, ")")
+		Logger.warning(item_name + " _update_held_position called but not child of holder (parent=" + str(get_parent()) + " holder=" + str(holder) + ")", "BaseItem")
 		return
 	
 	# Position relative to player using config offset (adjusted for facing direction)
@@ -191,38 +191,38 @@ func _update_held_position() -> void:
 	position = hold_offset
 	
 	# Debug positioning
-	print("📍 ", item_name, " position update: facing=", holder.facing_direction, " original_x=", original_x, " new_x=", hold_offset.x, " final_pos=", position)
+	Logger.debug(item_name + " position update: facing=" + str(holder.facing_direction) + " original_x=" + str(original_x) + " new_x=" + str(hold_offset.x) + " final_pos=" + str(position), "BaseItem")
 	
 	# Update visual orientation to match player facing
 	# Scale the entire item node to flip it visually
 	var old_scale = scale.x
 	scale.x = abs(scale.x) * holder.facing_direction
-	print("🔄 ", item_name, " item flip: old_scale=", old_scale, " new_scale=", scale.x)
+	Logger.debug(item_name + " item flip: old_scale=" + str(old_scale) + " new_scale=" + str(scale.x), "BaseItem")
 
 ## Detach item from player
 func _detach_from_player() -> void:
 	if not holder:
-		print("❌ Cannot detach ", item_name, " - no holder")
+		Logger.warning("Cannot detach " + item_name + " - no holder", "BaseItem")
 		return
 	
-	print("🔗 Detaching ", item_name, " from ", holder.player_data.player_name)
+	Logger.debug("Detaching " + item_name + " from " + holder.player_data.player_name, "BaseItem")
 	
 	# Get world position before reparenting
 	var world_pos = global_position
-	print("   World position before detach: ", world_pos)
+	Logger.debug("World position before detach: " + str(world_pos), "BaseItem")
 	
 	# Remove from player
 	holder.remove_child(self)
-	print("   Removed from player")
+	Logger.debug("Removed from player", "BaseItem")
 	
 	# Add back to scene tree (find appropriate parent)
 	var scene_root = holder.get_tree().current_scene
 	scene_root.add_child(self)
-	print("   Added to scene root: ", scene_root.name)
+	Logger.debug("Added to scene root: " + scene_root.name, "BaseItem")
 	
 	# Restore world position
 	global_position = world_pos
-	print("   Final world position: ", global_position)
+	Logger.debug("Final world position: " + str(global_position), "BaseItem")
 
 ## Get item info for UI display
 func get_item_info() -> Dictionary:

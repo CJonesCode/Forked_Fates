@@ -15,14 +15,14 @@ func _ready() -> void:
 	# Set title
 	title_label.text = "FORKED FATES"
 	
-	print("Main menu loaded")
+	Logger.system("Main menu loaded", "MainMenu")
 
 func _on_start_button_pressed() -> void:
-	print("Starting game...")
+	Logger.game_flow("Starting game", "MainMenu")
 	# Transition to map view
 	EventBus.request_scene_transition("res://scenes/ui/map_view.tscn")
 	GameManager.change_state(GameManager.GameState.MAP_VIEW)
 
 func _on_quit_button_pressed() -> void:
-	print("Quitting game...")
+	Logger.system("Quitting game", "MainMenu")
 	get_tree().quit() 

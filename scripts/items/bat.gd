@@ -37,7 +37,7 @@ func _ready() -> void:
 		# Disable attack area initially
 		attack_area.monitoring = false
 	
-	print("Bat initialized")
+	Logger.item(item_name, "initialized", "Bat")
 
 func _process(delta: float) -> void:
 	if is_swinging:
@@ -75,7 +75,7 @@ func _swing() -> bool:
 	# Apply swing animation/rotation
 	_start_swing_animation()
 	
-	print(holder.player_data.player_name, " swings the bat!")
+	Logger.combat(holder.player_data.player_name + " swings the bat!", "Bat")
 	return true
 
 ## End the swing
@@ -130,7 +130,7 @@ func _on_attack_area_entered(body: Node2D) -> void:
 		# Apply knockback (this can stay direct since it's a physics effect)
 		_apply_knockback(target_player)
 		
-		print("Bat reported ", damage, " damage from Player ", attacker_id, " to ", target_player.player_data.player_name, "!")
+		Logger.combat("Bat reported " + str(damage) + " damage from Player " + str(attacker_id) + " to " + target_player.player_data.player_name, "Bat")
 
 ## Handle target leaving attack range
 func _on_attack_area_exited(body: Node2D) -> void:
@@ -159,7 +159,7 @@ func _apply_knockback(target: BasePlayer) -> void:
 	# Add some upward force for dramatic effect
 	target.velocity.y -= knockback_force * 0.3
 	
-	print("Applied knockback to ", target.player_data.player_name)
+	Logger.combat("Applied knockback to " + target.player_data.player_name, "Bat")
 
 ## Override base item aiming - bat uses player facing for swing direction
 func _get_aim_direction() -> Vector2:

@@ -17,19 +17,19 @@ func _ready() -> void:
 	# Get the parent BasePlayer
 	player = get_parent() as BasePlayer
 	if not player:
-		print("PlayerInputController must be a child of BasePlayer")
+		Logger.error("PlayerInputController must be a child of BasePlayer", "PlayerInputController")
 		return
 	
 	# Try to get player_id from parent's player_data if available
 	if player.player_data and player_id == 0:
 		player_id = player.player_data.player_id
-		print("📋 InputController inherited player_id ", player_id, " from BasePlayer")
+		Logger.debug("InputController inherited player_id " + str(player_id) + " from BasePlayer", "PlayerInputController")
 	
 	# Initialize input config if not set
 	if not input_config:
 		_setup_default_input_config()
 	
-	print("Input controller initialized for player ", player_id, " using ", input_config.get_device_name())
+	Logger.system("Input controller initialized for player " + str(player_id) + " using " + input_config.get_device_name(), "PlayerInputController")
 
 func _process(_delta: float) -> void:
 	if not player or player.current_state == BasePlayer.PlayerState.DEAD or player.current_state == BasePlayer.PlayerState.RAGDOLLED:
@@ -89,8 +89,8 @@ func setup_for_player(p_id: int, config: InputConfig = null) -> void:
 	else:
 		_setup_default_input_config()
 	
-	print("🎮 Player ", player_id, " input configured with ", input_config.get_device_name())
-	print("   Actions: ", input_config.move_left_action, ", ", input_config.move_right_action, ", ", input_config.jump_action, ", ", input_config.use_action, ", ", input_config.drop_action)
+	Logger.system("Player " + str(player_id) + " input configured with " + input_config.get_device_name(), "PlayerInputController")
+	Logger.debug("Actions: " + input_config.move_left_action + ", " + input_config.move_right_action + ", " + input_config.jump_action + ", " + input_config.use_action + ", " + input_config.drop_action, "PlayerInputController")
 
 ## Setup default input configuration based on player ID
 func _setup_default_input_config() -> void:
@@ -101,7 +101,7 @@ func _setup_default_input_config() -> void:
 	else:
 		# Fallback to first config if player_id is out of range
 		input_config = default_configs[0]
-		print("Warning: Player ID ", player_id, " out of range, using default config")
+		Logger.warning("Player ID " + str(player_id) + " out of range, using default config", "PlayerInputController")
 	
 	# Validate input actions exist
 	_validate_input_config()
@@ -109,7 +109,7 @@ func _setup_default_input_config() -> void:
 ## Validate that all required input actions exist in the Input Map
 func _validate_input_config() -> void:
 	if not input_config:
-		print("ERROR: No input config for player ", player_id)
+		Logger.error("No input config for player " + str(player_id), "PlayerInputController")
 		return
 	
 	var missing_actions: Array[String] = []
@@ -128,9 +128,9 @@ func _validate_input_config() -> void:
 	
 	# Report missing actions
 	if missing_actions.size() > 0:
-		print("WARNING: Player ", player_id, " missing input actions: ", missing_actions)
-		print("  These inputs will not work until added to Input Map")
+		Logger.warning("Player " + str(player_id) + " missing input actions: " + str(missing_actions), "PlayerInputController")
+		Logger.warning("These inputs will not work until added to Input Map", "PlayerInputController")
 	else:
-		print("✅ Player ", player_id, " all input actions found")
+		Logger.debug("Player " + str(player_id) + " all input actions found", "PlayerInputController")
 
 # Removed get_aim_direction() - weapons now handle their own aiming 

@@ -46,7 +46,7 @@ func _ready() -> void:
 	if not bullet_scene:
 		bullet_scene = preload("res://scenes/items/bullet.tscn")
 	
-	print("Pistol initialized with ", current_ammo, " rounds")
+	Logger.item(item_name, "initialized with " + str(current_ammo) + " rounds", "Pistol")
 
 func _process(delta: float) -> void:
 	if is_reloading:
@@ -107,7 +107,7 @@ func _shoot() -> bool:
 		var recoil_velocity = -shoot_direction * recoil_force
 		holder.velocity += recoil_velocity
 	
-	print(holder.player_data.player_name, " fired pistol! Ammo: ", current_ammo)
+	Logger.combat(holder.player_data.player_name + " fired pistol! Ammo: " + str(current_ammo), "Pistol")
 	
 	# Auto-reload if empty
 	if current_ammo <= 0:
@@ -134,14 +134,14 @@ func _start_reload() -> void:
 	
 	is_reloading = true
 	reload_timer = 0.0
-	print(holder.player_data.player_name, " is reloading pistol...")
+	Logger.item(item_name, "reloading by " + holder.player_data.player_name, "Pistol")
 
 ## Finish reload process
 func _finish_reload() -> void:
 	is_reloading = false
 	reload_timer = 0.0
 	current_ammo = max_ammo
-	print(holder.player_data.player_name, " finished reloading pistol")
+	Logger.item(item_name, "reload finished by " + holder.player_data.player_name, "Pistol")
 
 ## Get weapon status for UI
 func get_weapon_status() -> Dictionary:
