@@ -207,7 +207,7 @@ func make_move(player_id: int, move_data: Dictionary) -> bool:
 			"player_id": player_id,
 			"turn": current_turn,
 			"move_data": move_data.duplicate(),
-			"timestamp": Time.get_time_dict_from_system()["unix"]
+			"timestamp": Time.get_unix_time_from_system()
 		}
 		moves_history.append(move_record)
 		

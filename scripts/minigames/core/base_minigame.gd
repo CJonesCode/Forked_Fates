@@ -23,14 +23,14 @@ extends Node
 
 # Core signals - all minigames must emit these
 signal minigame_started()
-signal minigame_ended(result: MinigameResult)
+signal minigame_ended(result)
 signal minigame_paused()
 signal minigame_resumed()
 signal tutorial_shown()
 signal tutorial_finished()
 
 # Context and state
-var context: MinigameContext = null
+var context = null
 var is_active: bool = false
 var is_paused: bool = false
 var is_showing_tutorial: bool = false
@@ -49,24 +49,21 @@ func _process(delta: float) -> void:
 		if tutorial_timer <= 0:
 			finish_tutorial()
 
-## Initialize the minigame with context data
-## This is called before start_minigame() to set up the game
-## Virtual method - must be implemented by subclasses
+## Initialize the minigame with context and player data
 func initialize_minigame(minigame_context: MinigameContext) -> void:
+	if context:
+		Logger.warning("Minigame already initialized", "BaseMinigame")
+		return
+	
+	# Store context
 	context = minigame_context
-	Logger.game_flow("Initializing minigame: " + minigame_name + " with " + str(context.participating_players.size()) + " players", "BaseMinigame")
+	Logger.system("Initializing minigame: " + minigame_name + " with " + str(context.participating_players.size()) + " players", "BaseMinigame")
 	
-	# Validate player count
-	if context.participating_players.size() < min_players:
-		Logger.warning("Not enough players for " + minigame_name + ". Required: " + str(min_players) + ", Got: " + str(context.participating_players.size()), "BaseMinigame")
-		return
+	# Connect to universal damage reporting system
+	EventBus.player_damage_reported.connect(_on_player_damage_reported)
 	
-	if context.participating_players.size() > max_players:
-		Logger.warning("Too many players for " + minigame_name + ". Max: " + str(max_players) + ", Got: " + str(context.participating_players.size()), "BaseMinigame")
-		return
-	
-	# Virtual implementation hook
-	_on_initialize(context)
+	# Call virtual implementation
+	_on_initialize(minigame_context)
 
 ## Start the minigame (shows tutorial first if configured)
 ## Virtual method - can be overridden by subclasses
@@ -115,7 +112,7 @@ func finish_tutorial() -> void:
 ## Start the actual gameplay (after tutorial)
 func _start_gameplay() -> void:
 	is_active = true
-	start_time = Time.get_time_dict_from_system()["unix"]
+	start_time = Time.get_unix_time_from_system()
 	
 	Logger.game_flow("Starting gameplay: " + minigame_name, "BaseMinigame")
 	minigame_started.emit()
@@ -124,17 +121,24 @@ func _start_gameplay() -> void:
 	_on_start()
 
 ## End the minigame with results
-## Virtual method - can be overridden but should call super()
-func end_minigame(result: MinigameResult) -> void:
+## Virtual method - can be overridden but should call super._ready()
+func end_minigame(result) -> void:
 	if not is_active:
 		Logger.warning("Trying to end inactive minigame: " + minigame_name, "BaseMinigame")
 		return
 	
 	is_active = false
 	
+	# Hide any active game HUD when minigame ends
+	UIManager.hide_game_hud()
+	
+	# Disconnect universal systems
+	if EventBus.player_damage_reported.is_connected(_on_player_damage_reported):
+		EventBus.player_damage_reported.disconnect(_on_player_damage_reported)
+	
 	# Set duration if not already set
 	if result.duration == 0.0:
-		result.duration = Time.get_time_dict_from_system()["unix"] - start_time
+		result.duration = Time.get_unix_time_from_system() - start_time
 	
 	# Set minigame type if not already set
 	if result.minigame_type == "":
@@ -145,6 +149,45 @@ func end_minigame(result: MinigameResult) -> void:
 	
 	# Virtual implementation hook
 	_on_end(result)
+
+## Handle player damage reported from any source (weapons, hazards, etc.)
+## This is available to ALL minigame types, not just physics-based ones
+func _on_player_damage_reported(victim_id: int, attacker_id: int, damage: int, source_name: String) -> void:
+	# Find the target player by ID in the context
+	var target_player_data: PlayerData = null
+	for player_data in context.participating_players:
+		if player_data.player_id == victim_id:
+			target_player_data = player_data
+			break
+	
+	if not target_player_data:
+		Logger.warning("Damage target not found in minigame context: Player " + str(victim_id), "BaseMinigame")
+		return
+	
+	# Default implementation: delegate to subclass
+	# Subclasses can override this or use the virtual method below
+	_on_damage_reported(victim_id, attacker_id, damage, source_name, target_player_data)
+
+## Virtual method for subclasses to handle damage in their specific way
+## Examples:
+##   - Physics: Apply directly to player health
+##   - Collection: Reduce collected items, respawn player
+##   - Vehicle: Reduce speed, damage vehicle
+##   - Turn-based: Queue damage for next turn
+func _on_damage_reported(victim_id: int, attacker_id: int, damage: int, source_name: String, victim_data: PlayerData) -> void:
+	# Default: just log the damage event
+	var victim_name: String = victim_data.player_name
+	var attacker_name: String = "Player " + str(attacker_id)
+	
+	# Try to get attacker name from context
+	for player_data in context.participating_players:
+		if player_data.player_id == attacker_id:
+			attacker_name = player_data.player_name
+			break
+	
+	Logger.combat("Damage reported: " + str(damage) + " from " + attacker_name + " to " + victim_name + " via " + source_name, "BaseMinigame")
+	
+	# Subclasses should override this method to apply damage appropriately
 
 ## Pause the minigame
 ## Virtual method - can be overridden by subclasses
@@ -177,11 +220,11 @@ func abort_minigame() -> void:
 	Logger.warning("Aborting minigame: " + minigame_name, "BaseMinigame")
 	
 	if is_active:
-		var abort_result: MinigameResult = MinigameResult.new()
+		var abort_result = MinigameResult.new()
 		abort_result.outcome = MinigameResult.MinigameOutcome.ABANDONED
 		abort_result.participating_players = context.get_player_ids() if context else []
 		abort_result.minigame_type = minigame_name
-		abort_result.duration = Time.get_time_dict_from_system()["unix"] - start_time if start_time > 0 else 0.0
+		abort_result.duration = Time.get_unix_time_from_system() - start_time if start_time > 0 else 0.0
 		
 		end_minigame(abort_result)
 	
@@ -197,7 +240,7 @@ func get_status() -> Dictionary:
 		"showing_tutorial": is_showing_tutorial,
 		"tutorial_time_remaining": tutorial_timer,
 		"players": context.participating_players.size() if context else 0,
-		"duration": Time.get_time_dict_from_system()["unix"] - start_time if start_time > 0 else 0.0
+		"duration": Time.get_unix_time_from_system() - start_time if start_time > 0 else 0.0
 	}
 
 ## Check if minigame has tutorial content defined
@@ -216,8 +259,8 @@ func get_tutorial_data() -> Dictionary:
 	}
 
 ## Create MinigameInfo from this minigame's metadata (for self-registration)
-func create_registry_info(scene_path: String) -> MinigameRegistry.MinigameInfo:
-	var info: MinigameRegistry.MinigameInfo = MinigameRegistry.MinigameInfo.new(
+func create_registry_info(scene_path: String):
+	var info = MinigameRegistry.MinigameInfo.new(
 		minigame_name.to_lower().replace(" ", "_"),  # Convert to ID
 		minigame_name,
 		scene_path
@@ -234,11 +277,11 @@ func create_registry_info(scene_path: String) -> MinigameRegistry.MinigameInfo:
 	return info
 
 # Virtual methods for subclasses to implement
-# These provide clean hooks without requiring super() calls
+# These provide clean hooks without requiring super._ready() calls
 
 ## Called during initialize_minigame() after basic setup
 ## Override this to set up your minigame-specific systems
-func _on_initialize(minigame_context: MinigameContext) -> void:
+func _on_initialize(minigame_context) -> void:
 	# Default implementation does nothing
 	pass
 
@@ -250,7 +293,7 @@ func _on_start() -> void:
 
 ## Called during end_minigame() after basic cleanup
 ## Override this to handle cleanup of your systems
-func _on_end(result: MinigameResult) -> void:
+func _on_end(result) -> void:
 	# Default implementation does nothing
 	pass
 

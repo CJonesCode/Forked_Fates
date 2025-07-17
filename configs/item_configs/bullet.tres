@@ -1,0 +1,17 @@
+[gd_resource type="Resource" format=3 load_steps=2]
+
+[ext_resource type="Script" path="res://configs/item_configs/item_config.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/items/bullet.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_script")
+item_id = "bullet"
+item_name = "Bullet"
+item_type = 3
+item_scene = ExtResource("2_scene")
+scene_path = "res://scenes/items/bullet.tscn"
+use_pooling = true
+damage_amount = 1
+use_duration = 0.0
+rarity = 1
+description = "Standard ammunition for firearms" 

@@ -28,7 +28,7 @@ func _setup_placeholder_ui() -> void:
 func _on_back_button_pressed() -> void:
 	Logger.game_flow("Returning to main menu", "MapView")
 	EventBus.request_scene_transition("res://scenes/ui/main_menu.tscn")
-	GameManager.change_state(GameManager.GameState.MENU)
+	GameManager.transition_to_menu()
 
 func _on_test_minigame_button_pressed() -> void:
 	Logger.game_flow("Starting test minigame", "MapView")

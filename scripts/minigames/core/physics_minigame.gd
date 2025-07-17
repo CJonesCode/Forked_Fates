@@ -17,11 +17,11 @@ var respawn_manager: RespawnManager = null
 @export var use_victory_conditions: bool = true
 @export var use_respawn_system: bool = true
 
-# Arena and spawn configuration
-@onready var arena: Node2D = $Arena
-@onready var spawn_points: Node2D = $SpawnPoints
-@onready var respawn_points: Node2D = $RespawnPoints
-@onready var item_spawn_points: Node2D = $ItemSpawnPoints
+# Arena and spawn configuration (assigned by subclass or found automatically)
+var arena: Node2D = null
+var spawn_points: Node2D = null
+var respawn_points: Node2D = null
+var item_spawn_points: Node2D = null
 
 # Physics minigame signals
 signal player_spawned(player: BasePlayer)
@@ -36,6 +36,9 @@ func _ready() -> void:
 	minigame_type = "physics"
 	minigame_description = "Physics-based minigame with player spawning and item management"
 	tags = ["physics"]
+	
+	# Find arena and spawn nodes if they exist
+	_find_arena_nodes()
 	
 	# Default tutorial content for physics minigames
 	tutorial_objective = "Survive and defeat your opponents!"
@@ -53,8 +56,25 @@ func _ready() -> void:
 
 ## Initialize physics minigame with standard managers
 func _on_initialize(minigame_context: MinigameContext) -> void:
-	Logger.system("Initializing PhysicsMinigame with standard managers", "PhysicsMinigame")
+	Logger.system("Initializing PhysicsMinigame", "PhysicsMinigame")
 	
+	# Store context reference
+	context = minigame_context
+	
+	# Find arena and spawn nodes
+	_find_arena_nodes()
+	
+	# Setup standard managers
+	_setup_standard_managers()
+	
+	# Setup physics environment
+	_setup_arena()
+	
+	# Hook for subclass initialization
+	_on_physics_initialize()
+
+## Setup standard managers for physics minigames
+func _setup_standard_managers() -> void:
 	# Set up standard managers based on configuration
 	if use_player_spawner:
 		player_spawner = context.get_standard_manager("player_spawner")
@@ -83,24 +103,31 @@ func _on_initialize(minigame_context: MinigameContext) -> void:
 			add_child(respawn_manager)
 			respawn_manager.setup_respawn_points(_get_respawn_points())
 			respawn_manager.player_respawned.connect(_on_player_respawned)
-	
-	# Setup arena and physics environment
-	_setup_arena()
-	
-	# Hook for subclass initialization
-	_on_physics_initialize()
 
 ## Start the physics minigame
 func _on_start() -> void:
 	Logger.game_flow("Starting PhysicsMinigame with standard systems", "PhysicsMinigame")
+	Logger.system("DEBUG: Player spawner available: " + str(player_spawner != null), "PhysicsMinigame")
+	Logger.system("DEBUG: Item spawner available: " + str(item_spawner != null), "PhysicsMinigame")
+	Logger.system("DEBUG: Context available: " + str(context != null), "PhysicsMinigame")
+	if context:
+		Logger.system("DEBUG: Participating players count: " + str(context.participating_players.size()), "PhysicsMinigame")
 	
 	# Spawn players if using player spawner
 	if player_spawner:
+		Logger.system("DEBUG: About to spawn all players", "PhysicsMinigame")
 		player_spawner.spawn_all_players(context.participating_players)
+		Logger.system("DEBUG: Player spawning command completed", "PhysicsMinigame")
+	else:
+		Logger.warning("DEBUG: No player spawner available!", "PhysicsMinigame")
 	
 	# Spawn initial items if using item spawner
 	if item_spawner:
+		Logger.system("DEBUG: About to spawn initial items", "PhysicsMinigame")
 		item_spawner.spawn_initial_items()
+		Logger.system("DEBUG: Item spawning command completed", "PhysicsMinigame")
+	else:
+		Logger.warning("DEBUG: No item spawner available!", "PhysicsMinigame")
 	
 	# Start victory condition tracking
 	if victory_condition_manager:
@@ -111,6 +138,8 @@ func _on_start() -> void:
 		respawn_manager.start_respawn_tracking()
 	
 	round_started.emit()
+	
+	Logger.system("DEBUG: PhysicsMinigame startup sequence completed", "PhysicsMinigame")
 	
 	# Hook for subclass start logic
 	_on_physics_start()
@@ -136,6 +165,14 @@ func _on_end(result: MinigameResult) -> void:
 	
 	# Hook for subclass cleanup
 	_on_physics_end(result)
+
+## Find arena and spawn nodes if they exist in the scene
+func _find_arena_nodes() -> void:
+	# Try to find common node names used in physics minigames
+	arena = get_node_or_null("Arena")
+	spawn_points = get_node_or_null("SpawnPoints")
+	respawn_points = get_node_or_null("RespawnPoints")
+	item_spawn_points = get_node_or_null("ItemSpawnPoints")
 
 ## Setup arena physics and environment
 func _setup_arena() -> void:
@@ -176,7 +213,8 @@ func _get_item_spawn_points() -> Array[Vector2]:
 
 ## Handle player spawning
 func _on_player_spawned(player: BasePlayer) -> void:
-	Logger.system("Player spawned: " + player.player_data.player_name, "PhysicsMinigame")
+	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
+	Logger.system("Player spawned: " + player_name, "PhysicsMinigame")
 	player_spawned.emit(player)
 	
 	# Hook for subclass player spawn handling
@@ -192,7 +230,8 @@ func _on_item_spawned(item: BaseItem) -> void:
 
 ## Handle player respawning
 func _on_player_respawned(player: BasePlayer) -> void:
-	Logger.game_flow("Player respawned: " + player.player_data.player_name, "PhysicsMinigame")
+	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
+	Logger.game_flow("Player respawned: " + player_name, "PhysicsMinigame")
 	
 	# Hook for subclass respawn handling
 	_on_physics_player_respawned(player)
@@ -202,7 +241,7 @@ func _on_victory_achieved(winner_data: Dictionary) -> void:
 	Logger.game_flow("Victory achieved in PhysicsMinigame", "PhysicsMinigame")
 	
 	# Create victory result
-	var result: MinigameResult
+	var result
 	if winner_data.has("winner_id"):
 		result = MinigameResult.create_victory_result(
 			winner_data.winner_id,
@@ -227,6 +266,37 @@ func _on_victory_achieved(winner_data: Dictionary) -> void:
 	
 	# End the minigame
 	end_minigame(result)
+
+## Override damage handling for physics minigames - apply damage directly to player health
+func _on_damage_reported(victim_id: int, attacker_id: int, damage: int, source_name: String, victim_data: PlayerData) -> void:
+	# Find the actual player instance by ID
+	var target_player: BasePlayer = null
+	
+	# Look through spawned players to find the victim
+	if player_spawner:
+		target_player = player_spawner.get_player(victim_id)
+	
+	if not target_player:
+		Logger.warning("Damage target not found: Player " + str(victim_id), "PhysicsMinigame")
+		return
+	
+	# Check if target is alive (don't damage dead players)
+	if target_player.current_state == BasePlayer.PlayerState.DEAD:
+		Logger.debug("Ignoring damage to dead player " + str(victim_id), "PhysicsMinigame")
+		return
+	
+	# Apply damage to the target player's health component
+	target_player.take_damage(damage)
+	
+	# Log the damage application with proper names
+	var victim_name: String = victim_data.player_name
+	var attacker_name: String = "Player " + str(attacker_id)
+	if attacker_id >= 0 and player_spawner:
+		var attacker_player: BasePlayer = player_spawner.get_player(attacker_id)
+		if attacker_player and attacker_player.player_data:
+			attacker_name = attacker_player.player_data.player_name
+	
+	Logger.combat("Applied " + str(damage) + " damage from " + attacker_name + " to " + victim_name + " via " + source_name, "PhysicsMinigame")
 
 # Virtual methods for subclasses to implement physics-specific logic
 

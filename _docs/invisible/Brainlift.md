@@ -168,3 +168,5 @@ Dragonbones and other plugins can be used to rig the sprites with kinematic bone
 
 Other Gauntlet Fellows are using templates to rapidly prototype, but the hand-rolled procedure I'm following may provide more performance benefits in the end.
 
+Over-saturation of documentation confuses everything, instead I am experimenting with an [agent_context_guide.md](../agent_context_guide.md) to combat this. Perhaps even a agent_context folder that has files split up into smaller relevant chunks to save on context.
+

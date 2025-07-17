@@ -104,7 +104,7 @@ func quick_launch(minigame_id: String, player_ids: Array[int]) -> BaseMinigame:
 			context.participating_players.append(player_data)
 	
 	# Create map snapshot
-	context.map_state_snapshot = MapSnapshot.create_current_snapshot()
+	context.map_state_snapshot = MinigameContext.create_current_snapshot()
 	
 	return launch_minigame(minigame_id, context)
 
@@ -174,7 +174,7 @@ func _on_minigame_ended(result: MinigameResult) -> void:
 	# Record in history
 	var history_entry: Dictionary = {
 		"minigame_id": minigame_id,
-		"timestamp": Time.get_time_dict_from_system()["unix"],
+		"timestamp": Time.get_unix_time_from_system(),
 		"duration": result.duration,
 		"outcome": result.outcome,
 		"participants": result.participating_players.duplicate(),
@@ -276,8 +276,8 @@ func register_minigame_scene(scene_path: String) -> void:
 	_register_minigame_from_scene(scene_path)
 
 ## Create a new minigame info helper (for manual registration)
-static func create_minigame_info(id: String, name: String, scene_path: String) -> MinigameInfo:
-	return MinigameInfo.new(id, name, scene_path)
+static func create_minigame_info(id: String, display_name: String, scene_path: String) -> MinigameInfo:
+	return MinigameInfo.new(id, display_name, scene_path)
 
 ## Batch register minigames from configuration
 func register_from_config(config: Dictionary) -> void:

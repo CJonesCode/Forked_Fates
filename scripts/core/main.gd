@@ -1,5 +1,7 @@
 extends Node
 
+
+
 ## Main scene controller - Root scene that manages the overall application flow
 ## Handles initial scene loading and high-level scene management
 ##
@@ -27,12 +29,39 @@ func _ready() -> void:
 	_load_initial_scene()
 	Logger.system("Main scene initialized", "Main")
 
+## Handle application shutdown - ensure proper cleanup
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		Logger.system("Application shutting down - forcing cleanup", "Main")
+		_force_cleanup_all_resources()
+
+## Force cleanup of all resources before shutdown
+func _force_cleanup_all_resources() -> void:
+	# Clean up dropped items and projectiles
+	_cleanup_dropped_items()
+	
+	# Clear all scenes
+	for child in scene_container.get_children():
+		child.queue_free()
+	
+	# Force clear object pools immediately
+	if PoolManager:
+		PoolManager.clear_all_pools()
+	
+	# Clean up EventBus connections
+	if EventBus:
+		EventBus.force_cleanup_all_connections()
+	
+	# Process pending deletions
+	await get_tree().process_frame
+	Logger.system("Forced cleanup completed", "Main")
+
 func _load_initial_scene() -> void:
 	# Load the main menu as the first scene
 	var main_menu_instance: Node = main_menu_scene.instantiate()
 	scene_container.add_child(main_menu_instance)
 	
-	GameManager.change_state(GameManager.GameState.MENU)
+	GameManager.transition_to_menu()
 
 func _on_scene_transition_requested(scene_path: String) -> void:
 	# Clean up dropped items before scene transition

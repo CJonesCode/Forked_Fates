@@ -42,17 +42,28 @@ func setup_spawn_points(points: Array[Vector2]) -> void:
 ## Spawn all players from player data array
 func spawn_all_players(player_data_array: Array[PlayerData]) -> void:
 	Logger.game_flow("Spawning " + str(player_data_array.size()) + " players", "PlayerSpawner")
+	Logger.system("DEBUG: Available spawn points: " + str(spawn_points.size()), "PlayerSpawner")
+	
+	# Build player names array for debug logging (GDScript doesn't support list comprehensions)
+	var player_names: Array[String] = []
+	for pd in player_data_array:
+		player_names.append(pd.player_name)
+	Logger.system("DEBUG: Player data array contents: " + str(player_names), "PlayerSpawner")
 	
 	if spawn_points.size() < player_data_array.size():
 		Logger.warning("Not enough spawn points (" + str(spawn_points.size()) + ") for players (" + str(player_data_array.size()) + ")", "PlayerSpawner")
 	
 	for i in range(player_data_array.size()):
+		Logger.system("DEBUG: Spawning player " + str(i) + ": " + player_data_array[i].player_name, "PlayerSpawner")
 		if i < spawn_points.size():
-			spawn_player(player_data_array[i], spawn_points[i])
+			var spawn_result = spawn_player(player_data_array[i], spawn_points[i])
+			Logger.system("DEBUG: Spawn result for " + player_data_array[i].player_name + ": " + str(spawn_result != null), "PlayerSpawner")
 		else:
 			# Use a default position if we run out of spawn points
-			spawn_player(player_data_array[i], Vector2.ZERO)
+			var spawn_result = spawn_player(player_data_array[i], Vector2.ZERO)
+			Logger.system("DEBUG: Spawn result (default pos) for " + player_data_array[i].player_name + ": " + str(spawn_result != null), "PlayerSpawner")
 	
+	Logger.system("DEBUG: Total spawned players: " + str(spawned_players.size()), "PlayerSpawner")
 	all_players_spawned.emit()
 
 ## Spawn a single player at a specific position
@@ -71,6 +82,8 @@ func spawn_player(player_data: PlayerData, position: Vector2) -> BasePlayer:
 	# Set player data BEFORE adding to scene tree
 	player_instance.player_data = player_data
 	
+	Logger.system("DEBUG: Adding player " + player_data.player_name + " to scene tree", "PlayerSpawner")
+	
 	# Add to scene tree
 	get_parent().add_child(player_instance)
 	
@@ -80,12 +93,15 @@ func spawn_player(player_data: PlayerData, position: Vector2) -> BasePlayer:
 	# Set spawn position for respawning
 	player_instance.set_spawn_position(position)
 	
+	Logger.system("DEBUG: Player " + player_data.player_name + " added and positioned", "PlayerSpawner")
+	
 	# Configure input controller
 	if auto_setup_input:
 		_setup_player_input(player_instance, player_data.player_id)
 	
-	# Apply visual identification
+	# Apply visual identification (now synchronous)
 	if apply_player_colors:
+		Logger.system("DEBUG: Starting color application for player " + str(player_data.player_id), "PlayerSpawner")
 		_apply_player_color(player_instance, player_data.player_id)
 	
 	# Track the player
@@ -160,29 +176,46 @@ func cleanup_players() -> void:
 
 ## Setup input controller for a player
 func _setup_player_input(player: BasePlayer, player_id: int) -> void:
-	var input_controller: Node = player.get_node("InputController")
-	if input_controller and input_controller.has_method("setup_for_player"):
-		input_controller.setup_for_player(player_id)
+	var input_component: InputComponent = player.get_component(InputComponent)
+	if input_component and input_component.has_method("setup_for_player"):
+		input_component.setup_for_player(player_id)
 		Logger.system("Configured input for player " + str(player_id), "PlayerSpawner")
 	else:
-		Logger.warning("No InputController found for player " + str(player_id), "PlayerSpawner")
+		Logger.warning("No InputComponent found for player " + str(player_id), "PlayerSpawner")
 
 ## Apply visual color identification to player
 func _apply_player_color(player: BasePlayer, player_id: int) -> void:
 	var player_sprite: Node = player.get_node_or_null("Sprite2D/PlayerSprite")
 	if not player_sprite:
-		Logger.warning("No PlayerSprite found for color application", "PlayerSpawner")
-		return
+		Logger.warning("No PlayerSprite found for color application at path Sprite2D/PlayerSprite", "PlayerSpawner")
+		# Try alternative paths in case the scene structure changed
+		player_sprite = player.get_node_or_null("PlayerSprite")
+		if not player_sprite:
+			Logger.warning("PlayerSprite not found at any expected path", "PlayerSpawner")
+			return
 	
 	var color_index: int = player_id % player_colors.size()
 	var player_color: Color = player_colors[color_index]
 	
-	if player_sprite.has_method("set_modulate"):
-		player_sprite.modulate = player_color
-	elif player_sprite.has_property("color"):
-		player_sprite.color = player_color
+	Logger.system("DEBUG: Applying color " + str(player_color) + " to player " + str(player_id) + " (" + player.player_data.player_name + ")", "PlayerSpawner")
+	Logger.system("DEBUG: PlayerSprite node type: " + player_sprite.get_class(), "PlayerSpawner")
 	
-	Logger.system("Applied color " + str(player_color) + " to player " + str(player_id), "PlayerSpawner")
+	# ColorRect uses the 'color' property directly
+	if player_sprite is ColorRect:
+		var color_rect: ColorRect = player_sprite as ColorRect
+		color_rect.color = player_color
+		Logger.system("Applied color " + str(player_color) + " via ColorRect.color to player " + str(player_id), "PlayerSpawner")
+	else:
+		# Fallback for other node types
+		if player_sprite.has_property("color"):
+			player_sprite.color = player_color
+			Logger.system("Applied color via color property", "PlayerSpawner")
+		elif player_sprite.has_property("modulate"):
+			player_sprite.modulate = player_color
+			Logger.system("Applied color via modulate property", "PlayerSpawner")
+		else:
+			Logger.warning("PlayerSprite has no color/modulate property", "PlayerSpawner")
+			return
 
 ## Modify spawn settings for all future spawns
 func modify_spawn_settings(settings: Dictionary) -> void:

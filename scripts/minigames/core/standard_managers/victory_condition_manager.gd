@@ -57,7 +57,7 @@ func setup_players(player_data_array: Array[PlayerData]) -> void:
 		"victory_type": VictoryType.keys()[victory_type],
 		"players_count": players.size(),
 		"teams_enabled": enable_teams,
-		"start_time": Time.get_time_dict_from_system()["unix"]
+		"start_time": Time.get_unix_time_from_system()
 	}
 	
 	Logger.system("VictoryConditionManager setup for " + str(players.size()) + " players", "VictoryConditionManager")
@@ -136,7 +136,7 @@ func eliminate_player(player_id: int) -> void:
 		game_statistics["eliminations"] = []
 	game_statistics["eliminations"].append({
 		"player_id": player_id,
-		"timestamp": Time.get_time_dict_from_system()["unix"]
+		"timestamp": Time.get_unix_time_from_system()
 	})
 	
 	# Check for victory condition
@@ -256,7 +256,7 @@ func _handle_victory(winner_data: Dictionary) -> void:
 	Logger.game_flow("Victory condition met: " + str(winner_data), "VictoryConditionManager")
 	
 	# Update final statistics
-	game_statistics["end_time"] = Time.get_time_dict_from_system()["unix"]
+	game_statistics["end_time"] = Time.get_unix_time_from_system()
 	game_statistics["winner_data"] = winner_data.duplicate()
 	
 	victory_achieved.emit(winner_data)

@@ -154,7 +154,8 @@ func _blink_player(alpha: float) -> void:
 func _get_player_by_id(player_id: int) -> BasePlayer:
 	# This would need to access the player spawner or game state
 	# For now, search through the scene tree
-	var players: Array[Node] = get_tree().get_nodes_in_group("players")
+	var players: Array[Node] = []
+	players.assign(get_tree().get_nodes_in_group("players"))
 	for node in players:
 		if node is BasePlayer and node.player_data.player_id == player_id:
 			return node

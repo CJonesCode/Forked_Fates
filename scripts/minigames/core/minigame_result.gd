@@ -8,10 +8,10 @@ extends Resource
 @export var participating_players: Array[int]
 @export var winners: Array[int] 
 @export var statistics: Dictionary  # kills, deaths, items used, etc.
-@export var rewards_earned: Array[Reward]
-@export var penalties_applied: Array[Penalty]
-@export var item_state_changes: Array[ItemStateChange]
-@export var progression_data: ProgressionData  # Simple map progression
+@export var rewards_earned: Array[Dictionary]  # Array of reward dictionaries
+@export var penalties_applied: Array[Dictionary]  # Array of penalty dictionaries
+@export var item_state_changes: Array[Dictionary]  # Array of item change dictionaries
+@export var progression_data: Dictionary = {}  # Simple map progression data
 @export var duration: float = 0.0
 @export var minigame_type: String = ""
 
@@ -30,6 +30,7 @@ func _init() -> void:
 	rewards_earned = []
 	penalties_applied = []
 	item_state_changes = []
+	progression_data = {}
 
 ## Create a simple victory result with basic information
 static func create_victory_result(winner_id: int, all_players: Array[int], game_type: String, game_duration: float) -> MinigameResult:
@@ -61,38 +62,10 @@ static func create_timeout_result(all_players: Array[int], game_type: String, ga
 	result.duration = game_duration
 	return result
 
-# Related data structures for complex state changes
-
-class_name Reward
-extends Resource
-
-@export var player_id: int
-@export var reward_type: String  # "currency", "item", "territory", "skill_point"
-@export var amount: int
-@export var item_name: String = ""  # For item rewards
-@export var territory_id: String = ""  # For territory rewards
-
-class_name Penalty
-extends Resource
-
-@export var player_id: int
-@export var penalty_type: String  # "currency_loss", "item_loss", "territory_loss", "temporary_debuff"
-@export var amount: int
-@export var duration: float = 0.0  # For temporary penalties
-@export var item_name: String = ""
-@export var territory_id: String = ""
-
-class_name ProgressionData
-extends Resource
-
-@export var unlock_next_nodes: Array[String] = []  # Node IDs that become available
-@export var block_nodes: Array[String] = []        # Node IDs that become unavailable
-@export var current_node_completed: bool = false   # Whether current node is marked complete
-
-class_name ItemStateChange
-extends Resource
-
-@export var player_id: int
-@export var item_name: String
-@export var change_type: String  # "gained", "lost", "upgraded", "damaged"
-@export var quantity: int = 1 
+# Note: Using Dictionary types for data structures to avoid inner class dependencies
+# Dictionary structures should follow these patterns:
+# 
+# Reward: {"player_id": int, "reward_type": String, "amount": int, "item_name": String, "territory_id": String}
+# Penalty: {"player_id": int, "penalty_type": String, "amount": int, "duration": float, "item_name": String, "territory_id": String}
+# ProgressionData: {"unlock_next_nodes": Array[String], "block_nodes": Array[String], "current_node_completed": bool}
+# ItemStateChange: {"player_id": int, "item_name": String, "change_type": String, "quantity": int} 

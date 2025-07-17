@@ -310,7 +310,7 @@ func _set_panel_modulate(panel: Control, color: Color) -> void:
 	panel.modulate = color
 
 # Signal handlers
-func _on_player_health_changed(player_id: int, new_health: int) -> void:
+func _on_player_health_changed(player_id: int, new_health: int, max_health: int) -> void:
 	_update_player_health(player_id, new_health)
 	_flash_panel(player_id, Color.RED)  # Flash red on damage
 

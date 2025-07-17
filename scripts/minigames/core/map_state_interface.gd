@@ -38,7 +38,7 @@ class StateChange:
 	
 	func _init(type: ChangeType) -> void:
 		change_type = type
-		timestamp = Time.get_time_dict_from_system()["unix"]
+		timestamp = Time.get_unix_time_from_system()
 
 func _ready() -> void:
 	Logger.system("MapStateInterface ready", "MapStateInterface")

@@ -54,17 +54,45 @@ func _ready() -> void:
 	
 	Logger.item(item_name, "initialized", "BaseItem")
 
+## Cleanup item properly to prevent RID leaks
+func _exit_tree() -> void:
+	# Disconnect pickup area signals
+	if pickup_area:
+		if pickup_area.body_entered.is_connected(_on_pickup_area_entered):
+			pickup_area.body_entered.disconnect(_on_pickup_area_entered)
+		if pickup_area.body_exited.is_connected(_on_pickup_area_exited):
+			pickup_area.body_exited.disconnect(_on_pickup_area_exited)
+	
+	# Only clear holder reference if we're actually being destroyed, not just reparenting
+	# Check if we're being held - if so, don't clear the holder reference during reparenting
+	if holder and not is_held:
+		holder = null
+	
+	Logger.debug("BaseItem " + item_name + " cleanup completed", "BaseItem")
+
 # Note: Position updates are now handled immediately when player facing changes
 # in the player's set_input function, so no _process needed
 
 ## Attempt to pick up this item
 func pickup(player: BasePlayer) -> bool:
+	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
+	Logger.pickup("DEBUG: " + item_name + ".pickup() called by " + player_name, "BaseItem")
+	Logger.pickup("DEBUG: can_be_picked_up=" + str(can_be_picked_up) + " is_held=" + str(is_held) + " player=" + str(player != null), "BaseItem")
+	
 	if not can_be_picked_up or is_held or not player:
+		Logger.pickup("DEBUG: " + item_name + " pickup failed initial checks", "BaseItem")
 		return false
 	
 	# Check if enough time has passed since last drop
-	if Time.get_unix_time_from_system() - last_use_time < game_config.item_pickup_disable_time:
+	var time_since_drop = Time.get_unix_time_from_system() - last_use_time
+	var required_time = game_config.item_pickup_disable_time
+	Logger.pickup("DEBUG: " + item_name + " time check: " + str(time_since_drop) + " >= " + str(required_time), "BaseItem")
+	
+	if time_since_drop < required_time:
+		Logger.pickup("DEBUG: " + item_name + " pickup failed - too soon since last drop", "BaseItem")
 		return false
+	
+	Logger.pickup("DEBUG: " + item_name + " setting held state", "BaseItem")
 	
 	# Set as held
 	is_held = true
@@ -72,17 +100,21 @@ func pickup(player: BasePlayer) -> bool:
 	
 	# Disable physics while held
 	freeze = true
+	Logger.pickup("DEBUG: " + item_name + " removing from collision layers", "BaseItem")
 	CollisionLayers.remove_layer(self, CollisionLayers.Layer.ITEMS)
 	CollisionLayers.remove_mask(self, CollisionLayers.Mask.ITEMS_INTERACTION)
 	
 	# Attach to player
+	Logger.pickup("DEBUG: " + item_name + " calling _attach_to_player", "BaseItem")
 	_attach_to_player(player)
 	
 	# Emit signals
 	item_picked_up.emit(player)
-	EventBus.emit_item_picked_up(player.player_data.player_id, item_name)
+	var player_id = player.player_data.player_id if player.player_data else -1
+	EventBus.emit_item_picked_up(player_id, item_name)
 	
-	Logger.pickup(player.player_data.player_name + " picked up " + item_name, "BaseItem")
+	Logger.pickup(player_name + " picked up " + item_name, "BaseItem")
+	Logger.pickup("DEBUG: " + item_name + " pickup complete - is_held=" + str(is_held) + " visible=" + str(visible), "BaseItem")
 	return true
 
 ## Drop this item
@@ -93,7 +125,8 @@ func drop(drop_velocity: Vector2 = Vector2.ZERO) -> bool:
 	var dropping_player = holder
 	
 	# Detach from player BEFORE resetting holder
-	Logger.pickup("Dropping " + item_name + " from " + dropping_player.player_data.player_name, "BaseItem")
+	var dropping_player_name: String = dropping_player.player_data.player_name if dropping_player.player_data else "Unknown Player"
+	Logger.pickup("Dropping " + item_name + " from " + dropping_player_name, "BaseItem")
 	_detach_from_player()
 	
 	# Reset state
@@ -115,9 +148,11 @@ func drop(drop_velocity: Vector2 = Vector2.ZERO) -> bool:
 	
 	# Emit signals
 	item_dropped.emit(dropping_player)
-	EventBus.emit_item_dropped(dropping_player.player_data.player_id, item_name)
+	var dropping_player_id = dropping_player.player_data.player_id if dropping_player.player_data else -1
+	EventBus.emit_item_dropped(dropping_player_id, item_name)
 	
-	Logger.pickup(dropping_player.player_data.player_name + " dropped " + item_name, "BaseItem")
+	# Use the same variable we defined earlier
+	Logger.pickup(dropping_player_name + " dropped " + item_name, "BaseItem")
 	return true
 
 ## Use this item
@@ -135,19 +170,21 @@ func use_item() -> bool:
 	# Call the specific use implementation
 	if _use_implementation():
 		item_used.emit(holder)
-		EventBus.emit_item_used(holder.player_data.player_id, item_name)
+		var holder_id = holder.player_data.player_id if holder.player_data else -1
+		EventBus.emit_item_used(holder_id, item_name)
 		return true
 	
 	return false
 
 ## Override this in derived classes for specific use behavior
 func _use_implementation() -> bool:
-	Logger.item(item_name, "used by " + holder.player_data.player_name, "BaseItem")
+	var holder_name = holder.player_data.player_name if holder.player_data else "Unknown Player"
+	Logger.item(item_name, "used by " + holder_name, "BaseItem")
 	return true
 
 ## Override this in derived classes to define weapon-specific aiming behavior
 ## Examples:
-##   - Pistol: return Vector2(holder.facing_direction, 0)  # Follow player facing
+##   - Pistol: get facing from MovementComponent  # Follow player facing
 ##   - Shotgun: might use player facing with spread
 ##   - Homing weapon: might track nearest enemy
 ##   - Consumables: return Vector2.ZERO (no aiming needed)
@@ -157,21 +194,52 @@ func _get_aim_direction() -> Vector2:
 
 ## Attach item to player (visually and spatially)
 func _attach_to_player(player: BasePlayer) -> void:
-	Logger.debug("Attaching " + item_name + " to " + player.player_data.player_name + " (facing: " + str(player.facing_direction) + ")", "BaseItem")
+	# Get facing direction from player's MovementComponent for debug log
+	var movement_component: MovementComponent = player.get_component(MovementComponent)
+	var facing_direction: int = movement_component.facing_direction if movement_component else 1
+	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
+	Logger.debug("Attaching " + item_name + " to " + player_name + " (facing: " + str(facing_direction) + ")", "BaseItem")
+	
+	# Store the holder reference to preserve it during reparenting
+	var temp_holder: BasePlayer = holder
+	var temp_is_held: bool = is_held
+	
+	# Store current world position to avoid visual jump
+	var current_world_pos: Vector2 = global_position
+	Logger.debug(item_name + " world position before attach: " + str(current_world_pos), "BaseItem")
 	
 	# Remove from current parent
 	if get_parent():
 		get_parent().remove_child(self)
+		Logger.debug("Removed " + item_name + " from parent", "BaseItem")
+	
+	# Restore holder state after potential _exit_tree() call during reparenting
+	holder = temp_holder
+	is_held = temp_is_held
 	
 	# Add to player as child
 	player.add_child(self)
+	Logger.debug("Added " + item_name + " as child of " + player_name, "BaseItem")
+	
+	# Verify holder is still valid after reparenting
+	if not holder:
+		Logger.warning("Holder was lost during reparenting, restoring...", "BaseItem")
+		holder = player
+		is_held = true
+	
+	# Reset physics properties for held state
+	freeze = true
+	visible = true  # Ensure item remains visible
 	
 	# Reset rotation to 0 when picked up (fix rotation issue)
 	rotation = 0.0
 	
-	# Update position and visual orientation
+	# Update position and visual orientation immediately
 	Logger.debug("Calling _update_held_position from attach", "BaseItem")
 	_update_held_position()
+	
+	Logger.debug(item_name + " final relative position: " + str(position), "BaseItem")
+	Logger.debug(item_name + " final world position: " + str(global_position), "BaseItem")
 
 ## Update held item position and orientation based on player facing
 func _update_held_position() -> void:
@@ -184,20 +252,30 @@ func _update_held_position() -> void:
 		Logger.warning(item_name + " _update_held_position called but not child of holder (parent=" + str(get_parent()) + " holder=" + str(holder) + ")", "BaseItem")
 		return
 	
-	# Position relative to player using config offset (adjusted for facing direction)
-	var hold_offset = game_config.item_hold_offset
-	var original_x = hold_offset.x
-	hold_offset.x = abs(hold_offset.x) * holder.facing_direction  # Flip X based on facing direction
-	position = hold_offset
+	# Get facing direction from player's MovementComponent
+	var movement_component: MovementComponent = holder.get_component(MovementComponent)
+	var facing_direction: int = movement_component.facing_direction if movement_component else 1
 	
-	# Debug positioning
-	Logger.debug(item_name + " position update: facing=" + str(holder.facing_direction) + " original_x=" + str(original_x) + " new_x=" + str(hold_offset.x) + " final_pos=" + str(position), "BaseItem")
+	# Use inventory component's hold position method if available
+	var inventory_component: InventoryComponent = holder.get_component(InventoryComponent)
+	if inventory_component:
+		# Get the proper hold position in world coordinates
+		var world_hold_pos: Vector2 = inventory_component.get_item_hold_position()
+		# Convert to local coordinates relative to the player
+		position = holder.to_local(world_hold_pos)
+		Logger.debug(item_name + " positioned using InventoryComponent: world=" + str(world_hold_pos) + " local=" + str(position), "BaseItem")
+	else:
+		# Fallback: use game config offset directly
+		var hold_offset = game_config.item_hold_offset
+		hold_offset.x = abs(hold_offset.x) * facing_direction  # Flip X based on facing direction
+		position = hold_offset
+		Logger.debug(item_name + " positioned using fallback offset: " + str(position), "BaseItem")
 	
 	# Update visual orientation to match player facing
 	# Scale the entire item node to flip it visually
 	var old_scale = scale.x
-	scale.x = abs(scale.x) * holder.facing_direction
-	Logger.debug(item_name + " item flip: old_scale=" + str(old_scale) + " new_scale=" + str(scale.x), "BaseItem")
+	scale.x = abs(scale.x) * facing_direction
+	Logger.debug(item_name + " item flip: facing=" + str(facing_direction) + " old_scale=" + str(old_scale) + " new_scale=" + str(scale.x), "BaseItem")
 
 ## Detach item from player
 func _detach_from_player() -> void:

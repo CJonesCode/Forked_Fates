@@ -1,0 +1,20 @@
+[gd_resource type="Resource" format=3 load_steps=2]
+
+[ext_resource type="Script" path="res://configs/minigame_configs/minigame_config.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/minigames/sudden_death_minigame.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_script")
+minigame_id = "sudden_death"
+minigame_name = "Sudden Death"
+category = 0
+minigame_scene = ExtResource("2_scene")
+min_players = 2
+max_players = 4
+time_limit = 60.0
+difficulty = 2
+description = "Last player standing wins! No respawns, find weapons and eliminate opponents."
+needs_player_spawner = true
+needs_item_spawner = true
+needs_victory_manager = true
+needs_respawn_manager = false 

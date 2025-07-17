@@ -19,6 +19,11 @@ config/icon="res://icon.svg"
 
 EventBus="*res://autoloads/event_bus.gd"
 GameManager="*res://autoloads/game_manager.gd"
+UIManager="*res://scripts/ui/core/ui_manager.gd"
+PoolManager="*res://scripts/core/pool_manager.gd"
+PerformanceDashboard="*res://scripts/core/performance_dashboard.gd"
+DataManager="*res://scripts/core/data_manager.gd"
+ConfigManager="*res://scripts/core/config_manager.gd"
 
 [input]
 

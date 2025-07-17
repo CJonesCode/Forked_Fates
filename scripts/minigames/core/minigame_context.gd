@@ -6,9 +6,9 @@ extends Resource
 
 # Data provided to the minigame
 @export var participating_players: Array[PlayerData]
-@export var map_state_snapshot: MapSnapshot
-@export var available_systems: Dictionary  # System name -> system node reference
-@export var minigame_config: Dictionary  # Custom configuration for this minigame instance
+@export var map_state_snapshot: Dictionary = {}  # Map state data as dictionary
+@export var available_systems: Dictionary = {}  # System name -> system node reference
+@export var minigame_config: Dictionary = {}  # Custom configuration for this minigame instance
 
 # System control tracking
 var disabled_systems: Array[String] = []
@@ -20,6 +20,7 @@ signal system_disabled(system_name: String)
 
 func _init() -> void:
 	participating_players = []
+	map_state_snapshot = {}
 	available_systems = {}
 	minigame_config = {}
 
@@ -72,13 +73,17 @@ func get_player_ids() -> Array[int]:
 func _create_standard_manager(manager_type: String) -> Node:
 	match manager_type:
 		"player_spawner":
-			return preload("res://scripts/minigames/core/standard_managers/player_spawner.gd").new()
+			var script = load("res://scripts/minigames/core/standard_managers/player_spawner.gd")
+			return script.new()
 		"item_spawner":
-			return preload("res://scripts/minigames/core/standard_managers/item_spawner.gd").new()
+			var script = load("res://scripts/minigames/core/standard_managers/item_spawner.gd")
+			return script.new()
 		"victory_condition_manager":
-			return preload("res://scripts/minigames/core/standard_managers/victory_condition_manager.gd").new()
+			var script = load("res://scripts/minigames/core/standard_managers/victory_condition_manager.gd")
+			return script.new()
 		"respawn_manager":
-			return preload("res://scripts/minigames/core/standard_managers/respawn_manager.gd").new()
+			var script = load("res://scripts/minigames/core/standard_managers/respawn_manager.gd")
+			return script.new()
 		_:
 			Logger.warning("Unknown standard manager type: " + manager_type, "MinigameContext")
 			return null
@@ -92,41 +97,30 @@ func get_config(key: String, default_value = null):
 	return minigame_config.get(key, default_value)
 
 
-# Related data structure for map state snapshots
-class_name MapSnapshot
-extends Resource
+# Note: Using Dictionary for map_state_snapshot to avoid inner class dependencies
+# MapSnapshot Dictionary structure:
+# {
+#   "current_map_node": String,
+#   "available_nodes": Array[String],
+#   "completed_nodes": Array[String], 
+#   "player_positions": Dictionary,  # player_id -> Vector2
+#   "timestamp": float
+# }
 
-## Snapshot of the current map state for minigame context and potential rollback
-
-@export var current_map_node: String = ""     # Current node ID on the map
-@export var available_nodes: Array[String] = []  # Available node IDs to move to
-@export var completed_nodes: Array[String] = []  # Completed node IDs
-@export var player_positions: Dictionary = {}    # player_id -> Vector2 position
-@export var player_inventories: Dictionary = {}  # player_id -> Array[item_name]
-@export var snapshot_timestamp: float
-
-func _init() -> void:
-	current_map_node = ""
-	available_nodes = []
-	completed_nodes = []
-	player_positions = {}
-	player_inventories = {}
-	snapshot_timestamp = Time.get_time_dict_from_system()["unix"]
-
-## Create a snapshot from current game state
-static func create_current_snapshot() -> MapSnapshot:
-	var snapshot: MapSnapshot = MapSnapshot.new()
-	
-	# TODO: Populate with actual game state data
-	# This would be implemented as the map system develops
-	Logger.system("Created map state snapshot at " + str(snapshot.snapshot_timestamp), "MapSnapshot")
-	
-	return snapshot
+## Create a basic map snapshot from current game state (static helper)
+static func create_current_snapshot() -> Dictionary:
+	return {
+		"current_map_node": str(GameManager.current_map_node if GameManager else 0),
+		"available_nodes": [],
+		"completed_nodes": [],
+		"player_positions": {},
+		"timestamp": Time.get_unix_time_from_system()
+	}
 
 ## Check if a node is available to move to
 func is_node_available(node_id: String) -> bool:
-	return node_id in available_nodes
+	return node_id in map_state_snapshot.get("available_nodes", [])
 
 ## Check if a node has been completed
 func is_node_completed(node_id: String) -> bool:
-	return node_id in completed_nodes 
+	return node_id in map_state_snapshot.get("completed_nodes", []) 

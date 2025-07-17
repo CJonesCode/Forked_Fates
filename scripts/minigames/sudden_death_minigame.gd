@@ -1,330 +1,143 @@
-extends Node2D
+class_name SuddenDeathMinigame
+extends PhysicsMinigame
 
-## Sudden Death Minigame
-## 3-life elimination system with ragdoll physics
-
-@onready var arena: Node2D = $Arena
-@onready var spawn_points: Node2D = $SpawnPoints
-@onready var respawn_points: Node2D = $RespawnPoints
-@onready var item_spawn_points: Node2D = $ItemSpawnPoints
 @onready var ui_overlay: CanvasLayer = $UIOverlay
 @onready var back_button: Button = $UIOverlay/BackButton
 @onready var game_timer_label: Label = $UIOverlay/GameTimer
 
-# Remove the old status display - now using PlayerHUD
-# @onready var player_status: Label = $UIOverlay/PlayerStatus
-
-var players: Array[BasePlayer] = []
-var spawned_items: Array[BaseItem] = []
-var game_active: bool = false
+# Player HUD now managed by UIManager
 var game_timer: float = 0.0
 
-# Respawn system
-@export var respawn_delay: float = 3.0
-var dead_players: Dictionary = {}  # player_id -> respawn_timer
-var respawn_pool: Array[Vector2] = []  # Available respawn positions
-
-# Preload scenes
-var player_scene: PackedScene = preload("res://scenes/player/base_player.tscn")
-var pistol_scene: PackedScene = preload("res://scenes/items/pistol.tscn")
-var bat_scene: PackedScene = preload("res://scenes/items/bat.tscn")
-var player_hud_scene: PackedScene = preload("res://scenes/ui/player_hud.tscn")
-
-# HUD instance
-var player_hud: PlayerHUD = null
-
 func _ready() -> void:
-	Logger.game_flow("Sudden Death minigame initialized", "SuddenDeathMinigame")
+	super()
 	
-	# Connect UI signals
+	minigame_name = "Sudden Death"
+	minigame_description = "3-life elimination combat with ragdoll physics"
+	min_players = 2
+	max_players = 4
+	estimated_duration = 180.0
+	tags = ["combat", "elimination", "physics"]
+	
+	tutorial_rules = [
+		"Each player starts with 3 lives",
+		"Lose a life when your health reaches 0",
+		"Players respawn after 3 seconds if they have lives remaining",
+		"Items spawn around the arena - collect them for advantages",
+		"Last player standing wins!"
+	]
+	tutorial_objective = "Be the last player alive!"
+	tutorial_tips = [
+		"Collect weapons like pistols and bats",
+		"Use ragdoll physics to avoid attacks",
+		"Control territory around item spawn points"
+	]
+	tutorial_duration = 7.0
+	
+	# ONLY initialize from GameManager if context hasn't been set yet
+	# This prevents double initialization
+	if not context:
+		Logger.system("Context not set - checking for fallback initialization", "SuddenDeathMinigame")
+		_initialize_from_game_manager()
+	else:
+		Logger.system("Context already set - skipping fallback initialization", "SuddenDeathMinigame")
+
+## Initialize minigame context from GameManager (fallback for direct scene loading)
+func _initialize_from_game_manager() -> void:
+	if not GameManager or GameManager.players.is_empty():
+		Logger.warning("No players available from GameManager for minigame initialization", "SuddenDeathMinigame")
+		return
+	
+	Logger.system("Creating minigame context from GameManager player data", "SuddenDeathMinigame")
+	
+	# Create context with GameManager player data
+	var fallback_context: MinigameContext = MinigameContext.new()
+	
+	# Add all GameManager players to context
+	for player_data in GameManager.players.values():
+		fallback_context.participating_players.append(player_data)
+	
+	# Create basic map snapshot
+	fallback_context.map_state_snapshot = {
+		"current_map_node": str(GameManager.current_map_node),
+		"available_nodes": [],
+		"completed_nodes": [],
+		"player_positions": {},
+		"timestamp": Time.get_unix_time_from_system()
+	}
+	
+	# Initialize and start the minigame
+	initialize_minigame(fallback_context)
+	
+	# Start after a brief delay to ensure everything is ready
+	await get_tree().process_frame
+	start_minigame()
+
+func _on_physics_initialize() -> void:
 	if back_button:
 		back_button.pressed.connect(_on_back_button_pressed)
 	
-	# Connect to player death events for respawn handling
-	EventBus.player_died.connect(_on_player_died)
-	EventBus.player_damage_reported.connect(_on_player_damage_reported)
+	victory_condition_manager.victory_type = VictoryConditionManager.VictoryType.ELIMINATION
+	respawn_manager.respawn_delay = 3.0
+	respawn_manager.max_respawns = -1
 	
-	# Create and add the PlayerHUD
-	player_hud = player_hud_scene.instantiate()
-	add_child(player_hud)
-	
-	_setup_arena()
-	_spawn_players()
-	_spawn_items()
-	_start_game()
+	# Show player HUD using UIManager
+	var player_data_array: Array[PlayerData] = []
+	for player_data in GameManager.players.values():
+		player_data_array.append(player_data)
+	UIManager.show_game_hud(player_data_array)
 
+## Override tutorial process to add debug logging
 func _process(delta: float) -> void:
-	if game_active:
+	super(delta)
+	
+	# Add debug logging for tutorial state
+	if is_showing_tutorial and tutorial_timer > 0:
+		if int(tutorial_timer) != int(tutorial_timer + delta):  # Log every second
+			Logger.system("Tutorial countdown: " + str(int(tutorial_timer)) + " seconds remaining", "SuddenDeathMinigame")
+	
+	# Game timer update
+	if is_active and not is_paused:
 		game_timer += delta
 		_update_game_timer_display()
-		_handle_respawns(delta)
-		_check_victory_condition()
 
-## Update game timer display
+## Override tutorial finish to add logging
+func finish_tutorial() -> void:
+	Logger.system("SuddenDeathMinigame finishing tutorial", "SuddenDeathMinigame")
+	super()
+
+## Override start gameplay to add logging
+func _start_gameplay() -> void:
+	Logger.system("SuddenDeathMinigame starting gameplay", "SuddenDeathMinigame") 
+	super()
+
+## Override physics start to add logging  
+func _on_physics_start() -> void:
+	Logger.system("SuddenDeathMinigame physics start - spawning should begin", "SuddenDeathMinigame")
+	game_timer = 0.0
+	_update_game_timer_display()
+	EventBus.round_started.emit()
+
 func _update_game_timer_display() -> void:
 	if game_timer_label:
-		var minutes = int(game_timer) / 60
-		var seconds = int(game_timer) % 60
+		var minutes: int = int(game_timer) / 60
+		var seconds: int = int(game_timer) % 60
 		game_timer_label.text = "Time: %02d:%02d" % [minutes, seconds]
 
-## Handle back button press
 func _on_back_button_pressed() -> void:
-	Logger.game_flow("Returning to map view", "SuddenDeathMinigame")
+	abort_minigame()
 	EventBus.request_scene_transition("res://scenes/ui/map_view.tscn")
-	GameManager.change_state(GameManager.GameState.MAP_VIEW)
+	GameManager.transition_to_map_view()
 
-# Removed _on_player_health_changed - now handled by PlayerHUD automatically
-
-func _setup_arena() -> void:
-	Logger.system("Arena setup complete with platforms and boundaries", "SuddenDeathMinigame")
-	_setup_respawn_pool()
-
-## Setup the respawn point pool
-func _setup_respawn_pool() -> void:
-	respawn_pool.clear()
+func _on_physics_victory(winner_data: Dictionary, result: MinigameResult) -> void:
+	result.statistics["game_duration"] = game_timer
 	
-	# Collect all respawn points
-	for child in respawn_points.get_children():
-		if child is Marker2D:
-			respawn_pool.append(child.global_position)
+	if winner_data.has("winner_id"):
+		var winner_data_obj: PlayerData = context.get_player_data(winner_data.winner_id)
+		if winner_data_obj:
+			result.statistics["winner_name"] = winner_data_obj.player_name
 	
-	Logger.system("Respawn pool setup with " + str(respawn_pool.size()) + " points: " + str(respawn_pool), "SuddenDeathMinigame")
-
-func _spawn_players() -> void:
-	Logger.game_flow("Spawning players", "SuddenDeathMinigame")
-	
-	# Get spawn point positions
-	var spawn_positions: Array[Vector2] = []
-	for child in spawn_points.get_children():
-		if child is Marker2D:
-			spawn_positions.append(child.global_position)
-	
-	var player_count = 0
-	for player_data in GameManager.players.values():
-		if player_count < spawn_positions.size():
-			# Create player instance
-			var player_instance = player_scene.instantiate()
-			
-			# Set player data BEFORE adding to scene (so _ready() gets correct data)
-			player_instance.player_data = player_data
-			
-			# Now add to scene tree (this triggers _ready())
-			add_child(player_instance)
-			var spawn_pos = spawn_positions[player_count]
-			player_instance.global_position = spawn_pos
-			
-			# Set the spawn position for respawning
-			player_instance.set_spawn_position(spawn_pos)
-			
-			# Set player color based on ID to match HUD colors
-			var player_sprite = player_instance.get_node("Sprite2D/PlayerSprite")
-			if player_sprite:
-				match player_data.player_id:
-					0:
-						player_sprite.color = Color(1.0, 0.3, 0.3, 1.0)  # Red (Player 1)
-					1:
-						player_sprite.color = Color(0.3, 0.3, 1.0, 1.0)  # Blue (Player 2)
-					2:
-						player_sprite.color = Color(0.3, 1.0, 0.3, 1.0)  # Green (Player 3)
-					3:
-						player_sprite.color = Color(1.0, 1.0, 0.3, 1.0)  # Yellow (Player 4)
-			
-			# Configure input controller
-			var input_controller = player_instance.get_node("InputController")
-			if input_controller:
-				input_controller.setup_for_player(player_data.player_id)
-			
-			# Add to players array
-			players.append(player_instance)
-			
-			Logger.system("Spawned player: " + player_data.player_name + " at " + str(spawn_positions[player_count]), "SuddenDeathMinigame")
-			player_count += 1
-
-func _spawn_items() -> void:
-	Logger.game_flow("Spawning items", "SuddenDeathMinigame")
-	
-	# Get item spawn positions
-	var item_positions: Array[Vector2] = []
-	for child in item_spawn_points.get_children():
-		if child is Marker2D:
-			item_positions.append(child.global_position)
-	
-	# Spawn items at each position
-	for i in range(item_positions.size()):
-		var item_scene_to_spawn = pistol_scene if i % 2 == 0 else bat_scene
-		var item_instance = item_scene_to_spawn.instantiate()
-		add_child(item_instance)
-		item_instance.global_position = item_positions[i]
-		spawned_items.append(item_instance)
-		
-		Logger.system("Spawned " + item_instance.item_name + " at " + str(item_positions[i]), "SuddenDeathMinigame")
-
-func _start_game() -> void:
-	game_active = true
-	game_timer = 0.0
-	
-	# Initialize timer display
-	_update_game_timer_display()
-	
-	EventBus.round_started.emit()
-	Logger.game_flow("Sudden death game started with " + str(players.size()) + " players!", "SuddenDeathMinigame")
-
-func _check_victory_condition() -> void:
-	# Count alive players
-	var alive_players: Array[BasePlayer] = []
-	for player in players:
-		if player and player.current_state == BasePlayer.PlayerState.ALIVE:
-			alive_players.append(player)
-	
-	# Check for victory condition
-	if alive_players.size() <= 1:
-		_end_game()
-
-func _end_game() -> void:
-	if not game_active:
-		return
-		
-	game_active = false
-	
-	# Find winner
-	var winner_id = -1
-	var winner_name = "No One"
-	
-	for player in players:
-		if player and player.current_state == BasePlayer.PlayerState.ALIVE:
-			winner_id = player.player_data.player_id
-			winner_name = player.player_data.player_name
-			break
-	
-	var results = {
+	EventBus.minigame_ended.emit(result.winners[0] if not result.winners.is_empty() else -1, {
 		"minigame_type": "sudden_death",
 		"duration": game_timer,
-		"winner_name": winner_name
-	}
-	
-	EventBus.minigame_ended.emit(winner_id, results)
-	Logger.game_flow("Game ended! Winner: " + winner_name + " (Duration: " + str(game_timer) + "s)", "SuddenDeathMinigame") 
-
-## Handle respawn timers and processing
-func _handle_respawns(delta: float) -> void:
-	var players_to_respawn: Array[int] = []
-	
-	for player_id in dead_players.keys():
-		dead_players[player_id] -= delta
-		
-		# Emit timer update for UI
-		EventBus.emit_player_respawn_timer_updated(player_id, dead_players[player_id])
-		
-		# Check if ready to respawn
-		if dead_players[player_id] <= 0.0:
-			players_to_respawn.append(player_id)
-	
-	# Respawn players whose timers have expired
-	for player_id in players_to_respawn:
-		_respawn_player(player_id)
-
-## Handle player death - start respawn process if they have lives
-func _on_player_died(player_id: int) -> void:
-	var player_data = GameManager.get_player_data(player_id)
-	if player_data and player_data.current_lives > 0:
-		Logger.game_flow("Starting respawn process for Player " + str(player_id) + " in " + str(respawn_delay) + " seconds", "SuddenDeathMinigame")
-		dead_players[player_id] = respawn_delay
-		
-		# Make player invisible during respawn
-		var player = _get_player_by_id(player_id)
-		if player:
-			player.visible = false
-	else:
-		Logger.game_flow("Player " + str(player_id) + " is out of lives - no respawn", "SuddenDeathMinigame")
-
-## Handle player damage reports from weapons
-func _on_player_damage_reported(victim_id: int, attacker_id: int, damage: int, weapon_name: String) -> void:
-	Logger.combat("Minigame received damage: Player " + str(attacker_id) + " hit Player " + str(victim_id) + " with " + weapon_name + " for " + str(damage) + " damage", "SuddenDeathMinigame")
-	
-	var victim_player = _get_player_by_id(victim_id)
-	var victim_data = GameManager.get_player_data(victim_id)
-	
-	if not victim_player or not victim_data:
-		Logger.warning("Invalid victim player for damage: " + str(victim_id), "SuddenDeathMinigame")
-		return
-	
-	# Only process damage for living players
-	if victim_player.current_state == BasePlayer.PlayerState.DEAD:
-		Logger.warning("Attempted to damage dead player: " + str(victim_id), "SuddenDeathMinigame")
-		return
-	
-	# Calculate new health
-	var new_health = max(0, victim_data.current_health - damage)
-	Logger.combat("Health change: " + str(victim_data.current_health) + " -> " + str(new_health), "SuddenDeathMinigame")
-	
-	# Update player data
-	victim_data.current_health = new_health
-	
-	# Tell the player to update their health
-	victim_player.set_health(new_health)
-	
-	# Emit health change event for UI
-	EventBus.emit_player_health_changed(victim_id, new_health)
-	
-	# Check if player died
-	if new_health <= 0:
-		_handle_player_death(victim_id)
-
-## Handle player death from health loss
-func _handle_player_death(player_id: int) -> void:
-	var player = _get_player_by_id(player_id)
-	var player_data = GameManager.get_player_data(player_id)
-	
-	if not player or not player_data:
-		return
-	
-	Logger.game_flow("Minigame handling death of Player " + str(player_id), "SuddenDeathMinigame")
-	
-	# Update player data
-	player_data.current_lives -= 1
-	player_data.is_alive = false
-	player_data.current_health = 0
-	
-	# Tell player to die
-	player.die()
-	
-	# Emit events
-	EventBus.emit_player_lives_changed(player_id, player_data.current_lives)
-	EventBus.emit_player_died(player_id)
-
-## Respawn a specific player
-func _respawn_player(player_id: int) -> void:
-	var player = _get_player_by_id(player_id)
-	var player_data = GameManager.get_player_data(player_id)
-	
-	if player and player_data and respawn_pool.size() > 0:
-		# Choose a respawn point from the pool
-		var respawn_position = respawn_pool[randi() % respawn_pool.size()]
-		
-		# Update player's spawn position to the respawn point
-		player.set_spawn_position(respawn_position)
-		
-		# Restore player health and state
-		player_data.current_health = player_data.max_health
-		player_data.is_alive = true
-		
-		# Tell player to update their health
-		player.set_health(player_data.current_health)
-		
-		# Respawn the player
-		player.respawn()
-		
-		# Emit health change for UI
-		EventBus.emit_player_health_changed(player_id, player_data.current_health)
-		
-		dead_players.erase(player_id)
-		Logger.game_flow("Player " + str(player_id) + " respawned by minigame at " + str(respawn_position) + " with " + str(player_data.current_health) + " health", "SuddenDeathMinigame")
-	else:
-		Logger.warning("Cannot respawn Player " + str(player_id) + " - no player found or no respawn points", "SuddenDeathMinigame")
-
-## Get player instance by ID
-func _get_player_by_id(player_id: int) -> BasePlayer:
-	for player in players:
-		if player.player_data.player_id == player_id:
-			return player
-	return null 
+		"winner_name": result.statistics.get("winner_name", "No One")
+	}) 

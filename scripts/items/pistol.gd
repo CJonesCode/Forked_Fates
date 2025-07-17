@@ -25,7 +25,7 @@ var reload_timer: float = 0.0
 @onready var shot_audio: AudioStreamPlayer2D = $ShotAudio
 
 func _ready() -> void:
-	super._ready()
+	super()
 	
 	# Initialize default values from config if not overridden
 	if bullet_speed == 800.0:  # Default value, use config
@@ -76,24 +76,36 @@ func _shoot() -> bool:
 	if shoot_direction == Vector2.ZERO:
 		return false
 	
-	# Create bullet
-	if bullet_scene:
-		var bullet = bullet_scene.instantiate()
+	# Get bullet from pool
+	var bullet: Node = PoolManager.get_bullet()
+	if bullet:
+		# Cast to Bullet type for proper access to methods
+		var bullet_obj: Bullet = bullet as Bullet
+		if not bullet_obj:
+			Logger.error("Retrieved bullet from pool is not a Bullet object", "Pistol")
+			return false
+		
+		# Ensure bullet is marked as pooled and properly activated
+		bullet_obj.is_pooled = true
 		
 		# Add bullet to scene
 		var scene_root = holder.get_tree().current_scene
-		scene_root.add_child(bullet)
+		scene_root.add_child(bullet_obj)
 		
 		# Position bullet at muzzle
 		var muzzle_pos = global_position
 		if muzzle_point:
 			muzzle_pos = muzzle_point.global_position
 		
-		bullet.global_position = muzzle_pos
+		bullet_obj.global_position = muzzle_pos
 		
-		# Set bullet properties
-		if bullet.has_method("initialize"):
-			bullet.initialize(shoot_direction * bullet_speed, damage, holder)
+		# Initialize bullet properties (this resets the bullet state and sets up collision detection)
+		bullet_obj.initialize(shoot_direction * bullet_speed, damage, holder)
+		
+		Logger.debug("Fired bullet with pooled state: " + str(bullet_obj.is_pooled), "Pistol")
+	else:
+		Logger.error("Failed to get bullet from pool", "Pistol")
+		return false
 	
 	# Consume ammo
 	current_ammo -= 1
@@ -107,7 +119,8 @@ func _shoot() -> bool:
 		var recoil_velocity = -shoot_direction * recoil_force
 		holder.velocity += recoil_velocity
 	
-	Logger.combat(holder.player_data.player_name + " fired pistol! Ammo: " + str(current_ammo), "Pistol")
+	var holder_name = holder.player_data.player_name if holder.player_data else "Unknown Player"
+	Logger.combat(holder_name + " fired pistol! Ammo: " + str(current_ammo), "Pistol")
 	
 	# Auto-reload if empty
 	if current_ammo <= 0:
@@ -120,8 +133,12 @@ func _get_aim_direction() -> Vector2:
 	if not holder:
 		return Vector2.ZERO
 	
+	# Get facing direction from player's MovementComponent
+	var movement_component: MovementComponent = holder.get_component(MovementComponent)
+	var facing_direction: int = movement_component.facing_direction if movement_component else 1
+	
 	# Pistol-specific aiming: simply follow player's facing direction
-	return Vector2(holder.facing_direction, 0)
+	return Vector2(facing_direction, 0)
 
 ## Get shooting direction (uses weapon's aiming implementation)
 func _get_shoot_direction() -> Vector2:
@@ -134,14 +151,16 @@ func _start_reload() -> void:
 	
 	is_reloading = true
 	reload_timer = 0.0
-	Logger.item(item_name, "reloading by " + holder.player_data.player_name, "Pistol")
+	var holder_name = holder.player_data.player_name if holder.player_data else "Unknown Player"
+	Logger.item(item_name, "reloading by " + holder_name, "Pistol")
 
 ## Finish reload process
 func _finish_reload() -> void:
 	is_reloading = false
 	reload_timer = 0.0
 	current_ammo = max_ammo
-	Logger.item(item_name, "reload finished by " + holder.player_data.player_name, "Pistol")
+	var holder_name = holder.player_data.player_name if holder.player_data else "Unknown Player"
+	Logger.item(item_name, "reload finished by " + holder_name, "Pistol")
 
 ## Get weapon status for UI
 func get_weapon_status() -> Dictionary:

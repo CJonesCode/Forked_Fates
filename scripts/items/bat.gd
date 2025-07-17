@@ -21,7 +21,7 @@ var swing_timer: float = 0.0
 var swing_targets: Array[BasePlayer] = []
 
 func _ready() -> void:
-	super._ready()
+	super()
 	
 	# Set item properties
 	item_name = "Bat"
@@ -75,7 +75,8 @@ func _swing() -> bool:
 	# Apply swing animation/rotation
 	_start_swing_animation()
 	
-	Logger.combat(holder.player_data.player_name + " swings the bat!", "Bat")
+	var holder_name: String = holder.player_data.player_name if holder.player_data else "Unknown Player"
+	Logger.combat(holder_name + " swings the bat!", "Bat")
 	return true
 
 ## End the swing
@@ -124,13 +125,15 @@ func _on_attack_area_entered(body: Node2D) -> void:
 		swing_targets.append(target_player)
 		
 		# Report damage to minigame instead of applying directly
-		var attacker_id = holder.player_data.player_id
-		EventBus.report_player_damage(target_player.player_data.player_id, attacker_id, damage, "Bat")
+		var attacker_id = holder.player_data.player_id if holder.player_data else -1
+		var target_id = target_player.player_data.player_id if target_player.player_data else -1
+		EventBus.report_player_damage(target_id, attacker_id, damage, "Bat")
 		
 		# Apply knockback (this can stay direct since it's a physics effect)
 		_apply_knockback(target_player)
 		
-		Logger.combat("Bat reported " + str(damage) + " damage from Player " + str(attacker_id) + " to " + target_player.player_data.player_name, "Bat")
+		var target_player_name: String = target_player.player_data.player_name if target_player.player_data else "Unknown Player"
+		Logger.combat("Bat reported " + str(damage) + " damage from Player " + str(attacker_id) + " to " + target_player_name, "Bat")
 
 ## Handle target leaving attack range
 func _on_attack_area_exited(body: Node2D) -> void:
@@ -159,15 +162,20 @@ func _apply_knockback(target: BasePlayer) -> void:
 	# Add some upward force for dramatic effect
 	target.velocity.y -= knockback_force * 0.3
 	
-	Logger.combat("Applied knockback to " + target.player_data.player_name, "Bat")
+	var target_name: String = target.player_data.player_name if target.player_data else "Unknown Player"
+	Logger.combat("Applied knockback to " + target_name, "Bat")
 
 ## Override base item aiming - bat uses player facing for swing direction
 func _get_aim_direction() -> Vector2:
 	if not holder:
 		return Vector2.ZERO
 	
+	# Get facing direction from player's MovementComponent
+	var movement_component: MovementComponent = holder.get_component(MovementComponent)
+	var facing_direction: int = movement_component.facing_direction if movement_component else 1
+	
 	# Bat-specific aiming: follow player's facing direction for swing orientation
-	return Vector2(holder.facing_direction, 0)
+	return Vector2(facing_direction, 0)
 
 ## Get weapon status for UI
 func get_weapon_status() -> Dictionary:

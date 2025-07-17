@@ -1,0 +1,17 @@
+[gd_resource type="Resource" format=3 load_steps=2]
+
+[ext_resource type="Script" path="res://configs/player_configs/player_config.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/player/base_player.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_script")
+player_name = "Standard Player"
+player_scene = ExtResource("2_scene")
+special_abilities = []
+max_health = 3
+regen_rate = 0.0
+damage_resistance = 0.0
+speed = 300.0
+jump_velocity = -400.0
+acceleration = 1500.0
+friction = 1200.0 

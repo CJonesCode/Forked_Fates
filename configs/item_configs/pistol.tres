@@ -1,0 +1,17 @@
+[gd_resource type="Resource" format=3 load_steps=2]
+
+[ext_resource type="Script" path="res://configs/item_configs/item_config.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/items/pistol.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_script")
+item_id = "pistol"
+item_name = "Pistol"
+item_type = 0
+item_scene = ExtResource("2_scene")
+scene_path = "res://scenes/items/pistol.tscn"
+use_pooling = true
+damage_amount = 1
+use_duration = 0.5
+rarity = 2
+description = "A reliable sidearm that fires bullets" 

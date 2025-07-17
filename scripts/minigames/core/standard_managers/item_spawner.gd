@@ -37,10 +37,20 @@ func setup_spawn_points(points: Array[Vector2]) -> void:
 ## Spawn initial items at start of minigame
 func spawn_initial_items() -> void:
 	Logger.game_flow("Spawning initial items", "ItemSpawner")
+	Logger.system("DEBUG: Available item spawn points: " + str(spawn_points.size()), "ItemSpawner")
+	Logger.system("DEBUG: Max items allowed: " + str(max_items), "ItemSpawner")
+	Logger.system("DEBUG: Available item types: " + str(item_scenes.keys()), "ItemSpawner")
 	
-	for i in range(min(spawn_points.size(), max_items)):
+	var items_to_spawn = min(spawn_points.size(), max_items)
+	Logger.system("DEBUG: Will spawn " + str(items_to_spawn) + " items", "ItemSpawner")
+	
+	for i in range(items_to_spawn):
 		var item_type: String = _get_random_item_type()
-		spawn_item(item_type, spawn_points[i])
+		Logger.system("DEBUG: Spawning item " + str(i) + ": " + item_type + " at " + str(spawn_points[i]), "ItemSpawner")
+		var spawn_result = spawn_item(item_type, spawn_points[i])
+		Logger.system("DEBUG: Item spawn result: " + str(spawn_result != null), "ItemSpawner")
+	
+	Logger.system("DEBUG: Total spawned items: " + str(spawned_items.size()), "ItemSpawner")
 
 ## Process automatic respawning
 func _process(delta: float) -> void:
