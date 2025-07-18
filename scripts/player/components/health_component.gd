@@ -55,8 +55,8 @@ func take_damage(damage: int, source: Node = null) -> void:
 	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
 	Logger.combat(player_name + " took " + str(damage) + " damage from " + str(source), "HealthComponent")
 	
-	if current_health <= 0 and old_health > 0:
-		_handle_death()
+	# Remove duplicate _handle_death() call - the setter _set_current_health() already handles death when health reaches 0
+	# This prevents double emission of player_died signal
 
 ## Heal the player
 func heal(amount: int) -> void:

@@ -28,10 +28,11 @@ var critical_resources: Array[String] = [
 ]
 
 func _ready() -> void:
-	if preload_critical_resources:
-		_preload_critical_resources()
+	# Don't preload critical resources on startup - wait until needed
+	# if preload_critical_resources:
+	#	_preload_critical_resources()
 	
-	Logger.system("ResourceLoaderOptimized initialized with caching: " + str(enable_caching), "ResourceLoader")
+	Logger.system("ResourceLoaderOptimized initialized with lazy loading - critical resources will be loaded when requested", "ResourceLoader")
 
 ## Load resource with caching
 func load_resource_cached(path: String) -> Resource:
@@ -111,6 +112,14 @@ func _preload_critical_resources() -> void:
 	
 	for resource_path in critical_resources:
 		preload_resource_async(resource_path)
+
+## Preload critical resources when they're actually needed (e.g., when starting a game mode)
+func preload_critical_resources_now() -> void:
+	if preload_critical_resources:
+		_preload_critical_resources()
+		Logger.system("Critical resources preloaded on demand", "ResourceLoader")
+	else:
+		Logger.debug("Critical resource preloading is disabled", "ResourceLoader")
 
 ## Clear resource cache
 func clear_cache() -> int:

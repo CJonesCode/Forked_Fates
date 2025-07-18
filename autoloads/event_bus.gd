@@ -54,10 +54,24 @@ signal scene_transition_requested(scene_path: String)
 signal game_paused()
 signal game_resumed()
 
-# Network signals (for future multiplayer implementation)
+# Network signals (Steam multiplayer implementation)
 signal network_player_joined(player_id: int)
 signal network_player_left(player_id: int)
 signal network_state_synced(game_state: Dictionary)
+
+# Steam-specific network signals
+signal steam_lobby_created(lobby_id: int)
+signal steam_lobby_joined(lobby_id: int)
+signal steam_lobby_left(lobby_id: int)
+signal steam_player_connected(steam_id: int, player_name: String)
+signal steam_player_disconnected(steam_id: int, player_name: String)
+signal network_player_position_updated(player_id: int, position: Vector2, velocity: Vector2)
+signal network_player_state_changed(player_id: int, state: String)
+signal network_item_spawned(item_type: String, position: Vector2, item_id: int)
+signal network_item_picked_up(player_id: int, item_id: int)
+signal network_sync_requested()
+signal network_sync_received(sync_data: Dictionary)
+signal network_chat_message_received(sender_name: String, message: String)
 
 func _ready() -> void:
 	# Set process mode to always so EventBus works even when game is paused
@@ -216,4 +230,73 @@ func emit_item_used(player_id: int, item_name: String) -> void:
 
 ## Request a scene transition
 func request_scene_transition(scene_path: String) -> void:
-	scene_transition_requested.emit(scene_path) 
+	scene_transition_requested.emit(scene_path)
+
+## Network event helpers
+
+## Emit Steam lobby events
+func emit_steam_lobby_created(lobby_id: int) -> void:
+	steam_lobby_created.emit(lobby_id)
+
+func emit_steam_lobby_joined(lobby_id: int) -> void:
+	steam_lobby_joined.emit(lobby_id)
+
+func emit_steam_lobby_left(lobby_id: int) -> void:
+	steam_lobby_left.emit(lobby_id)
+
+## Emit Steam player connection events
+func emit_steam_player_connected(steam_id: int, player_name: String) -> void:
+	steam_player_connected.emit(steam_id, player_name)
+
+func emit_steam_player_disconnected(steam_id: int, player_name: String) -> void:
+	steam_player_disconnected.emit(steam_id, player_name)
+
+## Emit network player updates
+func emit_network_player_position_updated(player_id: int, position: Vector2, velocity: Vector2) -> void:
+	network_player_position_updated.emit(player_id, position, velocity)
+
+func emit_network_player_state_changed(player_id: int, state: String) -> void:
+	network_player_state_changed.emit(player_id, state)
+
+## Emit network item events
+func emit_network_item_spawned(item_type: String, position: Vector2, item_id: int) -> void:
+	network_item_spawned.emit(item_type, position, item_id)
+
+func emit_network_item_picked_up(player_id: int, item_id: int) -> void:
+	network_item_picked_up.emit(player_id, item_id)
+
+## Emit network sync events
+func emit_network_sync_requested() -> void:
+	network_sync_requested.emit()
+
+func emit_network_sync_received(sync_data: Dictionary) -> void:
+	network_sync_received.emit(sync_data)
+
+## Emit network chat message
+func emit_network_chat_message_received(sender_name: String, message: String) -> void:
+	network_chat_message_received.emit(sender_name, message)
+
+## Route network events back to game systems
+func emit_network_event(event_name: String, data: Dictionary) -> void:
+	match event_name:
+		"player_damage":
+			player_damage_reported.emit(
+				data.get("victim_id", -1),
+				data.get("attacker_id", -1),
+				data.get("damage", 0),
+				data.get("weapon", "")
+			)
+		"player_died":
+			player_died.emit(data.get("player_id", -1))
+		"minigame_started":
+			minigame_started.emit(data.get("minigame_type", ""))
+		"minigame_ended":
+			minigame_ended.emit(
+				data.get("winner_id", -1),
+				data.get("results", {})
+			)
+		"chat_message":
+			emit_network_chat_message_received(
+				data.get("sender_name", "Unknown"),
+				data.get("message", "")
+			) 

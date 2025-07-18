@@ -36,9 +36,17 @@ var players: Dictionary = {} # player_id -> PlayerData
 var max_players: int = 4
 var local_player_id: int = 0
 
-# Networking preparation (for future use)
+# Networking (Steam integration)
 var is_host: bool = false
 var network_enabled: bool = false
+var host_steam_id: int = 0
+var connected_players: Dictionary = {}  # steam_id -> PlayerData
+
+# Network signals
+signal network_player_connected(steam_id: int, player_data: PlayerData)
+signal network_player_disconnected(steam_id: int)
+signal network_session_started()
+signal network_session_ended()
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -49,11 +57,29 @@ func _ready() -> void:
 	EventBus.player_lives_changed.connect(_on_player_lives_changed)
 	EventBus.minigame_ended.connect(_on_minigame_ended)
 	
-	# Initialize session and transition to menu
-	_initialize_session()
+	# Connect to Steam networking events (when available)
+	call_deferred("_connect_steam_signals")
+	
+	# Don't initialize session here - wait for game mode selection
+	# _initialize_session()  # REMOVED: Premature initialization
 	_set_current_state(GameState.MENU)
 	
-	Logger.system("GameManager initialized with state machine", "GameManager")
+	Logger.system("GameManager initialized with state machine - session will be initialized when game mode is selected", "GameManager")
+
+## Connect to Steam networking signals (deferred to ensure SteamManager is ready)
+func _connect_steam_signals() -> void:
+	if not SteamManager:
+		Logger.warning("SteamManager not available", "GameManager")
+		return
+	
+	# Connect to Steam lobby events
+	SteamManager.lobby_created.connect(_on_lobby_created)
+	SteamManager.lobby_joined.connect(_on_lobby_joined)
+	SteamManager.lobby_left.connect(_on_lobby_left)
+	SteamManager.player_joined_lobby.connect(_on_player_joined_lobby)
+	SteamManager.player_left_lobby.connect(_on_player_left_lobby)
+	
+	Logger.system("Connected to Steam networking events", "GameManager")
 
 ## Set current state with validation and transition logic
 func _set_current_state(new_state: GameState) -> void:
@@ -216,17 +242,40 @@ func is_in_state(state: GameState) -> bool:
 func can_pause() -> bool:
 	return current_state in [GameState.MAP_VIEW, GameState.MINIGAME]
 
+## Start local mode with proper session initialization
+func start_local() -> void:
+	Logger.system("Starting local mode", "GameManager")
+	
+	# Ensure we're in local mode
+	network_enabled = false
+	is_host = false
+	
+	# Resources will be loaded lazily when needed (following lazy loading principles)
+	# No need for explicit preloading since all systems use lazy initialization
+	
+	# Initialize session with test players for local mode
+	_initialize_session()
+	
+	# Transition to map view
+	transition_to_map_view()
+
 ## Initialize a new game session
 func _initialize_session() -> void:
 	session_id = _generate_session_id()
 	current_map_node = 0
 	players.clear()
 	
-	# Create test players for local gameplay
-	add_player(0, "Player 1")
-	add_player(1, "Player 2")
-	add_player(2, "Player 3")
-	add_player(3, "Player 4")
+	# Only create test players for local mode
+	# Multiplayer players will be added when they join the lobby
+	if not network_enabled:
+		# Create test players for local gameplay
+		add_player(0, "Player 1")
+		add_player(1, "Player 2")
+		add_player(2, "Player 3")
+		add_player(3, "Player 4")
+		Logger.system("Created test players for local session", "GameManager")
+	else:
+		Logger.system("Initialized empty session for multiplayer", "GameManager")
 
 ## Generate a unique session ID
 func _generate_session_id() -> String:
@@ -275,6 +324,11 @@ func update_player_health(player_id: int, new_health: int) -> void:
 func start_minigame(minigame_type: String) -> void:
 	current_minigame = minigame_type
 	_set_current_state(GameState.MINIGAME)
+	
+	# Reset all player data to default values for new minigame session
+	for player_data in players.values():
+		player_data.reset_for_new_minigame()
+	Logger.system("Reset all player data for new minigame session", "GameManager")
 	
 	# Create proper minigame context with player data
 	var context: MinigameContext = MinigameContext.new()
@@ -329,9 +383,12 @@ func _launch_sudden_death_minigame(context: MinigameContext) -> void:
 		
 		Logger.system("Initializing sudden death minigame with " + str(context.participating_players.size()) + " players", "GameManager")
 		
-		# For debugging: skip tutorial to test spawning
-		Logger.system("DEBUG: Skipping tutorial for faster testing", "GameManager")
-		minigame_instance.tutorial_duration = 0.0  # Skip tutorial
+		# Remove tutorial completely for testing (don't just set duration to 0)
+		Logger.system("DEBUG: Clearing tutorial content for faster testing", "GameManager")
+		minigame_instance.tutorial_rules.clear()
+		minigame_instance.tutorial_controls.clear()
+		minigame_instance.tutorial_objective = ""
+		minigame_instance.tutorial_tips.clear()
 		
 		minigame_instance.initialize_minigame(context)
 		minigame_instance.start_minigame()
@@ -409,4 +466,195 @@ func _on_player_lives_changed(player_id: int, new_lives: int) -> void:
 func _on_minigame_ended(winner_id: int, results: Dictionary) -> void:
 	Logger.game_flow("Minigame ended. Winner: " + str(winner_id), "GameManager")
 	# Return to map view
-	_set_current_state(GameState.MAP_VIEW) 
+	_set_current_state(GameState.MAP_VIEW)
+
+## Steam Networking Functions
+
+## Host a multiplayer game session
+func host_game() -> void:
+	if not SteamManager or not SteamManager.is_steam_enabled:
+		Logger.warning("Cannot host - Steam not available", "GameManager")
+		return
+	
+	is_host = true
+	host_steam_id = SteamManager.get_local_steam_id()
+	network_enabled = true
+	
+	# Resources will be loaded lazily when needed (following lazy loading principles)
+	# No need for explicit preloading since all systems use lazy initialization
+	
+	# Initialize empty multiplayer session
+	_initialize_session()  # This will create empty session since network_enabled = true
+	connected_players.clear()
+	
+	# Create Steam lobby
+	SteamManager.create_lobby()
+	Logger.system("Starting to host game session", "GameManager")
+
+## Join a multiplayer game session
+func join_game(lobby_id: int) -> void:
+	if not SteamManager or not SteamManager.is_steam_enabled:
+		Logger.warning("Cannot join - Steam not available", "GameManager")
+		return
+	
+	is_host = false
+	network_enabled = true
+	
+	# Initialize empty multiplayer session
+	_initialize_session()  # This will create empty session since network_enabled = true
+	connected_players.clear()
+	
+	# Join Steam lobby
+	SteamManager.join_lobby(lobby_id)
+	Logger.system("Attempting to join game session: " + str(lobby_id), "GameManager")
+
+## Leave current multiplayer session
+func leave_game() -> void:
+	if not network_enabled:
+		return
+	
+	if SteamManager and SteamManager.is_steam_enabled:
+		SteamManager.leave_lobby()
+	
+	# Reset networking state
+	is_host = false
+	network_enabled = false
+	host_steam_id = 0
+	connected_players.clear()
+	
+	# Reinitialize session for local mode
+	_initialize_session()
+	
+	Logger.system("Left multiplayer session", "GameManager")
+	network_session_ended.emit()
+
+## Add a network player to the session
+func add_network_player(steam_id: int, player_name: String) -> bool:
+	if connected_players.has(steam_id):
+		Logger.warning("Network player already exists: " + str(steam_id), "GameManager")
+		return false
+	
+	# Find next available player ID
+	var player_id: int = _get_next_player_id()
+	if player_id == -1:
+		Logger.warning("Cannot add network player: session full", "GameManager")
+		return false
+	
+	var player_data: PlayerData = PlayerData.new(player_id, player_name)
+	
+	# Add to both local players and connected players tracking
+	players[player_id] = player_data
+	connected_players[steam_id] = player_data
+	
+	Logger.system("Added network player: " + player_name + " (Steam ID: " + str(steam_id) + ", Player ID: " + str(player_id) + ")", "GameManager")
+	network_player_connected.emit(steam_id, player_data)
+	
+	# TODO: Send local player data to new player if we're host
+	# This requires implementing player data messaging in SteamManager
+	if is_host:
+		var local_player = get_player_data(local_player_id)
+		if local_player:
+			# TODO: SteamManager.send_player_data(local_player, steam_id)
+			Logger.debug("TODO: Send player data to new player " + str(steam_id), "GameManager")
+	
+	return true
+
+## Remove a network player from the session
+func remove_network_player(steam_id: int) -> bool:
+	if not connected_players.has(steam_id):
+		return false
+	
+	var player_data: PlayerData = connected_players[steam_id]
+	var player_id: int = player_data.player_id
+	
+	# Remove from both tracking dictionaries
+	connected_players.erase(steam_id)
+	players.erase(player_id)
+	
+	Logger.system("Removed network player: " + player_data.player_name + " (Steam ID: " + str(steam_id) + ")", "GameManager")
+	network_player_disconnected.emit(steam_id)
+	
+	return true
+
+## Get next available player ID for network players
+func _get_next_player_id() -> int:
+	for i in range(max_players):
+		if not players.has(i):
+			return i
+	return -1
+
+## Steam event handlers
+func _on_lobby_created(lobby_id: int) -> void:
+	Logger.system("Game lobby created: " + str(lobby_id), "GameManager")
+	
+	# Only emit session started once for the host
+	if not network_enabled:
+		Logger.warning("Lobby created but network not enabled - this shouldn't happen", "GameManager")
+		return
+	
+	network_session_started.emit()
+	
+	# Add self as first player (host)
+	var local_steam_id = SteamManager.get_local_steam_id()
+	var local_name = SteamManager.get_player_name(local_steam_id)
+	add_network_player(local_steam_id, local_name)
+
+func _on_lobby_joined(lobby_id: int) -> void:
+	Logger.system("Joined game lobby: " + str(lobby_id), "GameManager")
+	
+	# Only emit session started for clients (not hosts who already did in _on_lobby_created)
+	if not is_host:
+		network_session_started.emit()
+		
+		# TODO: Send our player data to the host
+		# This requires implementing player data messaging in SteamManager
+		var local_player = get_player_data(local_player_id)
+		if not local_player:
+			# Create local player if it doesn't exist
+			var local_steam_id = SteamManager.get_local_steam_id()
+			var local_name = SteamManager.get_player_name(local_steam_id)
+			add_player(local_player_id, local_name)
+			local_player = get_player_data(local_player_id)
+		
+		if local_player:
+			# TODO: SteamManager.send_player_data(local_player)
+			Logger.debug("TODO: Send player data to host", "GameManager")
+	else:
+		Logger.debug("Host received lobby_joined signal - Steam automatically joins host to their own lobby", "GameManager")
+
+func _on_lobby_left(lobby_id: int) -> void:
+	Logger.system("Left lobby: " + str(lobby_id), "GameManager")
+	leave_game()
+
+func _on_player_joined_lobby(steam_id: int) -> void:
+	if is_host:
+		var player_name = SteamManager.get_player_name(steam_id)
+		Logger.system("Player joined lobby: " + player_name + " (" + str(steam_id) + ")", "GameManager")
+		add_network_player(steam_id, player_name)
+
+func _on_player_left_lobby(steam_id: int) -> void:
+	var player_name = SteamManager.get_player_name(steam_id)
+	Logger.system("Player left lobby: " + player_name + " (" + str(steam_id) + ")", "GameManager")
+	remove_network_player(steam_id)
+
+## Get multiplayer session info
+func get_lobby_info() -> Dictionary:
+	if not network_enabled or not SteamManager:
+		return {}
+	
+	return {
+		"lobby_id": SteamManager.current_lobby_id,
+		"is_host": is_host,
+		"player_count": connected_players.size(),
+		"max_players": max_players,
+		"players": get_network_player_names()
+	}
+
+func get_network_player_names() -> Array[String]:
+	var names: Array[String] = []
+	for player_data in connected_players.values():
+		names.append(player_data.player_name)
+	return names
+
+func is_multiplayer_session() -> bool:
+	return network_enabled and connected_players.size() > 1 

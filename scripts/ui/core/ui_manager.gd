@@ -57,11 +57,27 @@ func pop_screen() -> Control:
 func get_current_screen() -> Control:
 	return screen_manager.get_current_screen()
 
-## Show modal overlay
-func show_overlay(overlay_scene: PackedScene, overlay_name: String = "") -> Control:
+## Show modal overlay (UIFactory-created Controls only)
+func show_overlay(overlay_control: Control, overlay_name: String = "") -> Control:
+	if not overlay_control:
+		Logger.error("Cannot show null overlay control", "UIManager")
+		return null
+	
+	var resolved_name: String = overlay_name if overlay_name != "" else overlay_control.get_class()
+	overlay_control.name = resolved_name
+	
+	return _add_overlay_to_stack(overlay_control, resolved_name)
+
+## DEPRECATED: Use UIFactory.create_screen() + show_overlay() instead
+func show_overlay_from_scene(overlay_scene: PackedScene, overlay_name: String = "") -> Control:
+	Logger.warning("show_overlay_from_scene() is deprecated. Use UIFactory.create_screen() + show_overlay() instead", "UIManager")
 	var overlay: Control = overlay_scene.instantiate()
 	overlay.name = overlay_name if overlay_name != "" else overlay.get_class()
 	
+	return _add_overlay_to_stack(overlay, overlay_name)
+
+## Internal method to add overlay to stack and scene tree
+func _add_overlay_to_stack(overlay: Control, overlay_name: String) -> Control:
 	# Add to overlay stack
 	overlay_stack.append(overlay)
 	

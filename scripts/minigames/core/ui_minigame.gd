@@ -130,11 +130,17 @@ func _setup_player_ui_components() -> void:
 
 ## Create UI component for a specific player (override in subclasses)
 func _create_player_ui_component(player_data: PlayerData) -> Control:
-	# Default implementation creates a simple label
-	var player_label: Label = Label.new()
-	player_label.text = player_data.player_name
-	player_label.name = "Player" + str(player_data.player_id) + "Label"
-	return player_label
+	# Default implementation creates a simple label using UIFactory
+	var label_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
+	label_config.element_name = "Player" + str(player_data.player_id) + "Label"
+	label_config.text = player_data.player_name
+	
+	var player_label: Node = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, label_config)
+	if player_label and player_label is Control:
+		return player_label as Control
+	else:
+		Logger.error("Failed to create player UI component through UIFactory", "UIMinigame")
+		return null
 
 ## Enable UI interactions
 func _enable_ui_interactions() -> void:

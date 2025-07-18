@@ -147,7 +147,7 @@ func is_minigame_active() -> bool:
 ## End current minigame (emergency stop)
 func end_current_minigame() -> void:
 	if current_minigame:
-		current_minigame.abort_minigame()
+		await current_minigame.abort_minigame()
 
 ## Get minigame info by ID
 func get_minigame_info(minigame_id: String) -> MinigameInfo:

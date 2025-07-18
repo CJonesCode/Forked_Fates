@@ -4,8 +4,8 @@ extends Node
 ## Communication bridge between minigames and the persistent overworld state
 ## Handles state synchronization, rollback scenarios, and world effect application
 
-# State tracking
-var pre_minigame_snapshot: MapSnapshot = null
+# State tracking - using Dictionary structures as per standards
+var pre_minigame_snapshot: Dictionary = {}
 var pending_changes: Array[StateChange] = []
 var committed_changes: Array[StateChange] = []
 var rollback_enabled: bool = true
@@ -14,7 +14,7 @@ var rollback_enabled: bool = true
 signal minigame_completed(result: MinigameResult)
 signal map_state_updated(changes: Array[StateChange])
 signal state_change_applied(change: StateChange)
-signal rollback_performed(snapshot: MapSnapshot)
+signal rollback_performed(snapshot: Dictionary)
 
 ## State change types
 enum ChangeType {
@@ -43,6 +43,15 @@ class StateChange:
 func _ready() -> void:
 	Logger.system("MapStateInterface ready", "MapStateInterface")
 
+## Proper cleanup following standards
+func _exit_tree() -> void:
+	# Clear all tracking data
+	pending_changes.clear()
+	committed_changes.clear()
+	
+	# Disconnect from any connected signals
+	Logger.system("MapStateInterface cleanup completed", "MapStateInterface")
+
 ## Apply minigame results to the persistent world state
 func apply_minigame_results(result: MinigameResult) -> void:
 	Logger.game_flow("Applying minigame results to world state", "MapStateInterface")
@@ -64,14 +73,25 @@ func apply_minigame_results(result: MinigameResult) -> void:
 	Logger.system("Applied " + str(committed_changes.size()) + " state changes from minigame", "MapStateInterface")
 
 ## Get pre-minigame snapshot for rollback scenarios
-func get_pre_minigame_snapshot() -> MapSnapshot:
-	if not pre_minigame_snapshot:
-		pre_minigame_snapshot = MapSnapshot.create_current_snapshot()
+func get_pre_minigame_snapshot() -> Dictionary:
+	if pre_minigame_snapshot.is_empty():
+		pre_minigame_snapshot = _create_current_snapshot()
 	return pre_minigame_snapshot
+
+## Create snapshot using Dictionary structure (following standards)
+func _create_current_snapshot() -> Dictionary:
+	var snapshot: Dictionary = {
+		"snapshot_timestamp": Time.get_unix_time_from_system(),
+		"player_states": {},
+		"map_data": {},
+		"game_state": {}
+	}
+	# Would populate with actual game state
+	return snapshot
 
 ## Rollback to pre-minigame state (for abandoned games)
 func rollback_to_snapshot() -> void:
-	if not rollback_enabled or not pre_minigame_snapshot:
+	if not rollback_enabled or pre_minigame_snapshot.is_empty():
 		Logger.warning("Rollback not available", "MapStateInterface")
 		return
 	
@@ -101,31 +121,31 @@ func _process_player_state_updates(result: MinigameResult) -> void:
 			player_data.current_health = new_health
 		
 		# Inventory modifications
-		for item_change in result.item_state_changes:
-			if item_change.player_id == player_id:
-				_apply_inventory_change(player_id, item_change)
+		for item_change_dict in result.item_state_changes:
+			if item_change_dict.get("player_id", -1) == player_id:
+				_apply_inventory_change(player_id, item_change_dict)
 
 ## Process map progression changes
 func _process_map_progression(result: MinigameResult) -> void:
-	if not result.progression_data:
+	if not result.progression_data or result.progression_data.is_empty():
 		return
 	
-	var progression: ProgressionData = result.progression_data
+	var progression_dict: Dictionary = result.progression_data
 	
 	# Mark current node as completed
-	if progression.current_node_completed:
+	if progression_dict.get("current_node_completed", false):
 		_add_state_change(ChangeType.MAP_PROGRESSION, [], 
 			{"current_node_completed": false}, 
 			{"current_node_completed": true})
 	
 	# Unlock new nodes
-	for node_id in progression.unlock_next_nodes:
+	for node_id in progression_dict.get("unlock_next_nodes", []):
 		_add_state_change(ChangeType.MAP_PROGRESSION, [], 
 			{"node": node_id, "available": false}, 
 			{"node": node_id, "available": true})
 	
 	# Block nodes (for story branching)
-	for node_id in progression.block_nodes:
+	for node_id in progression_dict.get("block_nodes", []):
 		_add_state_change(ChangeType.MAP_PROGRESSION, [], 
 			{"node": node_id, "available": true}, 
 			{"node": node_id, "available": false})
@@ -141,74 +161,86 @@ func _process_rewards_and_penalties(result: MinigameResult) -> void:
 		_apply_penalty(penalty)
 
 ## Apply a reward to a player
-func _apply_reward(reward: Reward) -> void:
-	var player_data: PlayerData = GameManager.get_player_data(reward.player_id)
+func _apply_reward(reward_dict: Dictionary) -> void:
+	var player_data: PlayerData = GameManager.get_player_data(reward_dict.get("player_id", -1))
 	if not player_data:
 		return
 	
-	match reward.reward_type:
+	var reward_type: String = reward_dict.get("reward_type", "")
+	var amount: int = reward_dict.get("amount", 0)
+	var item_name: String = reward_dict.get("item_name", "")
+	
+	match reward_type:
 		"currency":
 			# Add currency - would need currency system
-			Logger.system("Rewarded " + str(reward.amount) + " currency to player " + str(reward.player_id), "MapStateInterface")
+			Logger.system("Rewarded " + str(amount) + " currency to player " + str(reward_dict.get("player_id", -1)), "MapStateInterface")
 		"item":
 			# Add item to inventory
-			var item_change: ItemStateChange = ItemStateChange.new()
-			item_change.player_id = reward.player_id
-			item_change.item_name = reward.item_name
-			item_change.change_type = "gained"
-			item_change.quantity = reward.amount
-			_apply_inventory_change(reward.player_id, item_change)
+			var item_change_dict: Dictionary = {
+				"player_id": reward_dict.get("player_id", -1),
+				"item_name": item_name,
+				"change_type": "gained",
+				"quantity": amount
+			}
+			_apply_inventory_change(reward_dict.get("player_id", -1), item_change_dict)
 		"health":
 			# Restore health
-			var player_data: PlayerData = GameManager.get_player_data(reward.player_id)
 			if player_data:
 				var old_health: int = player_data.current_health
-				var new_health: int = min(player_data.max_health, old_health + reward.amount)
-				_add_state_change(ChangeType.PLAYER_HEALTH, [reward.player_id],
+				var new_health: int = min(player_data.max_health, old_health + amount)
+				_add_state_change(ChangeType.PLAYER_HEALTH, [reward_dict.get("player_id", -1)],
 					{"health": old_health}, {"health": new_health})
 
 ## Apply a penalty to a player
-func _apply_penalty(penalty: Penalty) -> void:
-	var player_data: PlayerData = GameManager.get_player_data(penalty.player_id)
+func _apply_penalty(penalty_dict: Dictionary) -> void:
+	var player_data: PlayerData = GameManager.get_player_data(penalty_dict.get("player_id", -1))
 	if not player_data:
 		return
 	
-	match penalty.penalty_type:
+	var penalty_type: String = penalty_dict.get("penalty_type", "")
+	var amount: int = penalty_dict.get("amount", 0)
+	var item_name: String = penalty_dict.get("item_name", "")
+	
+	match penalty_type:
 		"currency_loss":
-			Logger.system("Penalized " + str(penalty.amount) + " currency from player " + str(penalty.player_id), "MapStateInterface")
+			Logger.system("Penalized " + str(amount) + " currency from player " + str(penalty_dict.get("player_id", -1)), "MapStateInterface")
 		"item_loss":
-			var item_change: ItemStateChange = ItemStateChange.new()
-			item_change.player_id = penalty.player_id
-			item_change.item_name = penalty.item_name
-			item_change.change_type = "lost"
-			item_change.quantity = penalty.amount
-			_apply_inventory_change(penalty.player_id, item_change)
+			var item_change_dict: Dictionary = {
+				"player_id": penalty_dict.get("player_id", -1),
+				"item_name": item_name,
+				"change_type": "lost",
+				"quantity": amount
+			}
+			_apply_inventory_change(penalty_dict.get("player_id", -1), item_change_dict)
 		"health_loss":
 			# Damage player health
-			var player_data: PlayerData = GameManager.get_player_data(penalty.player_id)
 			if player_data:
 				var old_health: int = player_data.current_health
-				var new_health: int = max(0, old_health - penalty.amount)
-				_add_state_change(ChangeType.PLAYER_HEALTH, [penalty.player_id],
+				var new_health: int = max(0, old_health - amount)
+				_add_state_change(ChangeType.PLAYER_HEALTH, [penalty_dict.get("player_id", -1)],
 					{"health": old_health}, {"health": new_health})
 
 ## Apply inventory change
-func _apply_inventory_change(player_id: int, item_change: ItemStateChange) -> void:
+func _apply_inventory_change(player_id: int, item_change_dict: Dictionary) -> void:
 	var player_data: PlayerData = GameManager.get_player_data(player_id)
 	if not player_data:
 		return
+	
+	var item_name: String = item_change_dict.get("item_name", "")
+	var change_type: String = item_change_dict.get("change_type", "")
+	var quantity: int = item_change_dict.get("quantity", 0)
 	
 	# This would interface with actual inventory system
 	var old_inventory: Array = []  # Get current inventory
 	var new_inventory: Array = old_inventory.duplicate()
 	
-	match item_change.change_type:
+	match change_type:
 		"gained":
-			for i in range(item_change.quantity):
-				new_inventory.append(item_change.item_name)
+			for i in range(quantity):
+				new_inventory.append(item_name)
 		"lost":
-			for i in range(item_change.quantity):
-				new_inventory.erase(item_change.item_name)
+			for i in range(quantity):
+				new_inventory.erase(item_name)
 	
 	_add_state_change(ChangeType.PLAYER_INVENTORY, [player_id],
 		{"inventory": old_inventory}, {"inventory": new_inventory})
@@ -261,9 +293,10 @@ func _generate_change_summary(result: MinigameResult) -> Array[StateChange]:
 # Removed relationship system - not needed for this game type
 
 ## Restore state from snapshot
-func _restore_from_snapshot(snapshot: MapSnapshot) -> void:
+func _restore_from_snapshot(snapshot: Dictionary) -> void:
 	# This would restore all systems to snapshot state
-	Logger.system("Restoring state from snapshot timestamp: " + str(snapshot.snapshot_timestamp), "MapStateInterface")
+	var timestamp: float = snapshot.get("snapshot_timestamp", 0.0)
+	Logger.system("Restoring state from snapshot timestamp: " + str(timestamp), "MapStateInterface")
 
 ## Generate description for a state change
 func _generate_change_description(change: StateChange) -> String:

@@ -130,31 +130,31 @@ static func _configure_minigame(minigame: BaseMinigame, config: MinigameConfig, 
 
 # Item spawning configuration
 class ItemSpawnSettings extends Resource:
-@export var spawn_rate: float = 3.0
-@export var max_items: int = 10
-@export var spawn_areas: Array[Vector2] = []
-@export var item_types: Array[String] = []
-@export var random_spawn: bool = true
+	@export var spawn_rate: float = 3.0
+	@export var max_items: int = 10
+	@export var spawn_areas: Array[Vector2] = []
+	@export var item_types: Array[String] = []
+	@export var random_spawn: bool = true
 
 # Victory condition configuration
 class VictoryConditions extends Resource:
-enum VictoryType {
-	ELIMINATION,
-	SCORE,
-	SURVIVAL,
-	OBJECTIVE,
-	TIME
-}
+	enum VictoryType {
+		ELIMINATION,
+		SCORE,
+		SURVIVAL,
+		OBJECTIVE,
+		TIME
+	}
 
-@export var victory_type: VictoryType = VictoryType.ELIMINATION
-@export var target_score: int = 10
-@export var survival_time: float = 30.0
-@export var allow_draws: bool = false
+	@export var victory_type: VictoryType = VictoryType.ELIMINATION
+	@export var target_score: int = 10
+	@export var survival_time: float = 30.0
+	@export var allow_draws: bool = false
 
 # Respawn configuration
 class RespawnSettings extends Resource:
-@export var respawn_enabled: bool = true
-@export var respawn_delay: float = 3.0
-@export var max_respawns: int = -1  # -1 for unlimited
-@export var respawn_areas: Array[Vector2] = []
-@export var invincibility_time: float = 2.0 
+	@export var respawn_enabled: bool = true
+	@export var respawn_delay: float = 3.0
+	@export var max_respawns: int = -1  # -1 for unlimited
+	@export var respawn_areas: Array[Vector2] = []
+	@export var invincibility_time: float = 2.0 

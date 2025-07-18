@@ -97,36 +97,47 @@ func is_hud_visible() -> bool:
 
 ## Create temporary notification overlay
 func show_notification(message: String, duration: float = 3.0) -> void:
-	var notification_scene: PackedScene = null
-	if ResourceLoader.exists("res://scenes/ui/notification.tscn"):
-		notification_scene = load("res://scenes/ui/notification.tscn")
-	
-	if notification_scene:
-		var notification_instance: Control = notification_scene.instantiate()
-		get_tree().current_scene.add_child(notification_instance)
+	# Always use UIFactory for consistent notification creation
+	var notification_instance: Control = UIFactory.create_notification(message, UIFactory.NotificationType.INFO)
+	if notification_instance:
+		var notification_name: String = "notification_" + str(Time.get_unix_time_from_system())
+		notification_instance = UIManager.show_overlay(notification_instance, notification_name)
 		
-		if notification_instance.has_method("show_message"):
-			notification_instance.show_message(message, duration)
+		# Auto-remove after duration
+		var timer: Timer = Timer.new()
+		timer.wait_time = duration
+		timer.one_shot = true
+		timer.timeout.connect(func(): 
+			UIManager.hide_overlay(notification_name)
+			timer.queue_free()
+		)
+		get_tree().current_scene.add_child(timer)
+		timer.start()
 		
-		Logger.debug("Notification shown: " + message, "HUDController")
+		Logger.debug("Notification shown through UIFactory + UIManager: " + message, "HUDController")
 	else:
-		Logger.warning("Notification scene not found, using fallback", "HUDController")
-		_show_fallback_notification(message, duration)
+		Logger.error("Failed to create notification through UIFactory", "HUDController")
 
-## Fallback notification system using Label
+## Fallback notification system using UIFactory + UIManager
 func _show_fallback_notification(message: String, duration: float) -> void:
-	var notification_label: Label = Label.new()
-	notification_label.text = message
-	notification_label.position = Vector2(50, 50)
-	notification_label.z_index = 2000
+	# Use UIFactory to create consistent notification
+	var notification: Control = UIFactory.create_notification(message, UIFactory.NotificationType.INFO)
+	if not notification:
+		Logger.error("Failed to create notification through UIFactory", "HUDController")
+		return
 	
-	get_tree().current_scene.add_child(notification_label)
+	# Use UIManager overlay system for proper notification management
+	var notification_name: String = "notification_" + str(Time.get_unix_time_from_system())
+	UIManager.show_overlay(notification, notification_name)
 	
 	# Auto-remove after duration
 	var timer: Timer = Timer.new()
 	timer.wait_time = duration
 	timer.one_shot = true
-	timer.timeout.connect(func(): notification_label.queue_free(); timer.queue_free())
+	timer.timeout.connect(func(): 
+		UIManager.hide_overlay(notification_name)
+		timer.queue_free()
+	)
 	get_tree().current_scene.add_child(timer)
 	timer.start()
 

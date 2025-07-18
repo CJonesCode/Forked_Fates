@@ -23,7 +23,9 @@ signal config_reloaded(config_type: String, config_id: String)
 signal config_load_error(config_path: String, error: String)
 
 func _ready() -> void:
-	_load_all_configs()
+	# Don't load all configs eagerly - use lazy loading instead
+	# _load_all_configs()  # REMOVED: Eager loading
+	Logger.info("ConfigManager initialized with lazy loading - configs will be loaded when requested", "ConfigManager")
 
 # Player configuration management
 func get_player_config(config_id: String) -> PlayerConfig:
@@ -96,6 +98,8 @@ func get_minigame_config(config_id: String) -> MinigameConfig:
 func invalidate_minigame_config(config_id: String) -> void:
 	if minigame_configs.has(config_id):
 		minigame_configs.erase(config_id)
+
+# Network configuration management removed - using Steamworks only
 
 func invalidate_all_configs() -> void:
 	player_configs.clear()
@@ -203,13 +207,14 @@ func get_available_minigame_configs() -> Array[String]:
 func get_available_ui_configs(sub_type: String) -> Array[String]:
 	return _get_config_files_in_directory(UI_CONFIG_DIR + sub_type + "/")
 
-# Configuration management
+# Configuration management - DEPRECATED: Use lazy loading instead
 func _load_all_configs() -> void:
+	Logger.warning("_load_all_configs() called - this method is deprecated in favor of lazy loading", "ConfigManager")
 	_load_player_configs()
 	_load_item_configs()
 	_load_minigame_configs()
 	_load_ui_configs()
-	Logger.info("All configurations loaded", "ConfigManager")
+	Logger.info("All configurations loaded (consider using lazy loading instead)", "ConfigManager")
 
 func _get_config_files_in_directory(directory: String) -> Array[String]:
 	var configs: Array[String] = []

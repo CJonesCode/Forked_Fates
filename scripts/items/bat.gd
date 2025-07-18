@@ -31,8 +31,11 @@ func _ready() -> void:
 	# Setup attack area
 	if attack_area:
 		CollisionLayers.setup_attack_area(attack_area)
-		attack_area.body_entered.connect(_on_attack_area_entered)
-		attack_area.body_exited.connect(_on_attack_area_exited)
+		# Check before connecting to prevent duplicate connections (standards compliance)
+		if not attack_area.body_entered.is_connected(_on_attack_area_entered):
+			attack_area.body_entered.connect(_on_attack_area_entered)
+		if not attack_area.body_exited.is_connected(_on_attack_area_exited):
+			attack_area.body_exited.connect(_on_attack_area_exited)
 		
 		# Disable attack area initially
 		attack_area.monitoring = false
@@ -190,4 +193,27 @@ func get_item_info() -> Dictionary:
 	var info = super.get_item_info()
 	info["damage"] = damage
 	info["is_swinging"] = is_swinging
-	return info 
+	return info
+
+## Cleanup bat properly to prevent RID leaks (required by standards)
+func _exit_tree() -> void:
+	# Disconnect attack area signals if connected
+	if attack_area:
+		if attack_area.body_entered.is_connected(_on_attack_area_entered):
+			attack_area.body_entered.disconnect(_on_attack_area_entered)
+		if attack_area.body_exited.is_connected(_on_attack_area_exited):
+			attack_area.body_exited.disconnect(_on_attack_area_exited)
+	
+	# Clear swing targets and state
+	swing_targets.clear()
+	is_swinging = false
+	
+	# Clear holder reference
+	if holder:
+		holder = null
+	
+	# Clear audio references
+	if swing_audio:
+		swing_audio = null
+	
+	Logger.debug("Bat cleanup completed", "Bat") 

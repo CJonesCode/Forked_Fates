@@ -1,0 +1,152 @@
+[gd_scene load_steps=2 format=3 uid="uid://b7t6vkp3mp8ny"]
+
+[ext_resource type="Script" path="res://scripts/ui/direct_connect.gd" id="1_script"]
+
+[node name="DirectConnect" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_script")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.05, 0.05, 0.15, 0.95)
+
+[node name="MainContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -200.0
+offset_right = 300.0
+offset_bottom = 200.0
+
+[node name="Header" type="VBoxContainer" parent="MainContainer"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="MainContainer/Header"]
+layout_mode = 2
+theme_type_variation = &"HeaderLarge"
+text = "🎮 Steam Lobby"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="LocalIPPanel" type="PanelContainer" parent="MainContainer/Header"]
+layout_mode = 2
+
+[node name="LocalIPContainer" type="VBoxContainer" parent="MainContainer/Header/LocalIPPanel"]
+layout_mode = 2
+
+[node name="LocalIPLabel" type="Label" parent="MainContainer/Header/LocalIPPanel/LocalIPContainer"]
+layout_mode = 2
+text = "Player Name:"
+horizontal_alignment = 1
+
+[node name="LocalIPValue" type="Label" parent="MainContainer/Header/LocalIPPanel/LocalIPContainer"]
+layout_mode = 2
+theme_type_variation = &"HeaderMedium"
+text = "Loading..."
+horizontal_alignment = 1
+
+[node name="Spacer1" type="Control" parent="MainContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 20)
+
+[node name="ContentStack" type="VBoxContainer" parent="MainContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="HostPanel" type="PanelContainer" parent="MainContainer/ContentStack"]
+layout_mode = 2
+
+[node name="HostContainer" type="VBoxContainer" parent="MainContainer/ContentStack/HostPanel"]
+layout_mode = 2
+
+[node name="HostHeader" type="HBoxContainer" parent="MainContainer/ContentStack/HostPanel/HostContainer"]
+layout_mode = 2
+
+[node name="HostIcon" type="Label" parent="MainContainer/ContentStack/HostPanel/HostContainer/HostHeader"]
+layout_mode = 2
+text = "🏠"
+
+[node name="HostTitle" type="Label" parent="MainContainer/ContentStack/HostPanel/HostContainer/HostHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"HeaderMedium"
+text = "Host a Game"
+
+[node name="HostDescription" type="Label" parent="MainContainer/ContentStack/HostPanel/HostContainer"]
+layout_mode = 2
+text = "Create a Steam lobby. Friends can join using the lobby ID that will be displayed."
+autowrap_mode = 2
+
+[node name="HostButton" type="Button" parent="MainContainer/ContentStack/HostPanel/HostContainer"]
+layout_mode = 2
+text = "🏠 Host Game"
+
+[node name="Spacer2" type="Control" parent="MainContainer/ContentStack"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 15)
+
+[node name="JoinPanel" type="PanelContainer" parent="MainContainer/ContentStack"]
+layout_mode = 2
+
+[node name="JoinContainer" type="VBoxContainer" parent="MainContainer/ContentStack/JoinPanel"]
+layout_mode = 2
+
+[node name="JoinHeader" type="HBoxContainer" parent="MainContainer/ContentStack/JoinPanel/JoinContainer"]
+layout_mode = 2
+
+[node name="JoinIcon" type="Label" parent="MainContainer/ContentStack/JoinPanel/JoinContainer/JoinHeader"]
+layout_mode = 2
+text = "🔗"
+
+[node name="JoinTitle" type="Label" parent="MainContainer/ContentStack/JoinPanel/JoinContainer/JoinHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"HeaderMedium"
+text = "Join a Game"
+
+[node name="JoinDescription" type="Label" parent="MainContainer/ContentStack/JoinPanel/JoinContainer"]
+layout_mode = 2
+text = "Enter the Steam lobby ID from a friend to join their game."
+autowrap_mode = 2
+
+[node name="JoinInputContainer" type="HBoxContainer" parent="MainContainer/ContentStack/JoinPanel/JoinContainer"]
+layout_mode = 2
+
+[node name="IPInput" type="LineEdit" parent="MainContainer/ContentStack/JoinPanel/JoinContainer/JoinInputContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Enter Steam Lobby ID (e.g. 109775240836218)"
+
+[node name="JoinButton" type="Button" parent="MainContainer/ContentStack/JoinPanel/JoinContainer/JoinInputContainer"]
+layout_mode = 2
+text = "🚀 Connect"
+
+[node name="Spacer3" type="Control" parent="MainContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 20)
+
+[node name="Footer" type="HBoxContainer" parent="MainContainer"]
+layout_mode = 2
+
+[node name="BackButton" type="Button" parent="MainContainer/Footer"]
+layout_mode = 2
+text = "← Back to Main Menu"
+
+[node name="FooterSpacer" type="Control" parent="MainContainer/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StatusMessage" type="Label" parent="MainContainer/Footer"]
+layout_mode = 2
+text = ""
+horizontal_alignment = 2 

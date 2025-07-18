@@ -18,12 +18,18 @@ func _ready() -> void:
 	Logger.system("Map view loaded", "MapView")
 
 func _setup_placeholder_ui() -> void:
-	# Temporary placeholder until map system is implemented
-	var placeholder_label = Label.new()
-	placeholder_label.text = "MAP VIEW\n(Map system coming soon...)\n\nFor now, use Test Minigame button"
-	placeholder_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	placeholder_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	map_container.add_child(placeholder_label)
+	# Temporary placeholder until map system is implemented using UIFactory
+	var label_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
+	label_config.element_name = "PlaceholderLabel"
+	label_config.text = "MAP VIEW\n(Map system coming soon...)\n\nFor now, use Test Minigame button"
+	label_config.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label_config.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	var placeholder_label: Node = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, label_config)
+	if placeholder_label and placeholder_label is Control:
+		map_container.add_child(placeholder_label as Control)
+	else:
+		Logger.error("Failed to create placeholder label through UIFactory", "MapView")
 
 func _on_back_button_pressed() -> void:
 	Logger.game_flow("Returning to main menu", "MapView")

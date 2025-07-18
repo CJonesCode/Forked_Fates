@@ -1,0 +1,12 @@
+[gd_resource type="Resource" format=3 load_steps=2]
+
+[ext_resource type="Script" path="res://configs/ui_configs/screen_config.gd" id="1_screen_config_script"]
+[ext_resource type="PackedScene" path="res://scenes/ui/direct_connect.tscn" id="2_direct_connect_scene"]
+
+[resource]
+script = ExtResource("1_screen_config_script")
+screen_id = "direct_connect"
+screen_name = "Direct Connect"
+screen_scene = ExtResource("2_direct_connect_scene")
+background_color = Color(0, 0, 0, 0)
+theme_path = "" 

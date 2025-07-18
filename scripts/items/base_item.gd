@@ -44,8 +44,11 @@ func _ready() -> void:
 	# Setup pickup area collision
 	if pickup_area:
 		CollisionLayers.setup_pickup_area(pickup_area)
-		pickup_area.body_entered.connect(_on_pickup_area_entered)
-		pickup_area.body_exited.connect(_on_pickup_area_exited)
+		# Check before connecting to prevent duplicate connections (standards compliance)
+		if not pickup_area.body_entered.is_connected(_on_pickup_area_entered):
+			pickup_area.body_entered.connect(_on_pickup_area_entered)
+		if not pickup_area.body_exited.is_connected(_on_pickup_area_exited):
+			pickup_area.body_exited.connect(_on_pickup_area_exited)
 	
 	# Debug collision setup
 	CollisionLayers.debug_collision_setup(self, item_name + " item body")
@@ -285,16 +288,20 @@ func _detach_from_player() -> void:
 	
 	Logger.debug("Detaching " + item_name + " from " + holder.player_data.player_name, "BaseItem")
 	
+	# Store references before reparenting (holder might become null during _exit_tree())
+	var temp_holder: BasePlayer = holder
+	var scene_tree = temp_holder.get_tree()
+	
 	# Get world position before reparenting
 	var world_pos = global_position
 	Logger.debug("World position before detach: " + str(world_pos), "BaseItem")
 	
 	# Remove from player
-	holder.remove_child(self)
+	temp_holder.remove_child(self)
 	Logger.debug("Removed from player", "BaseItem")
 	
-	# Add back to scene tree (find appropriate parent)
-	var scene_root = holder.get_tree().current_scene
+	# Add back to scene tree using stored reference
+	var scene_root = scene_tree.current_scene
 	scene_root.add_child(self)
 	Logger.debug("Added to scene root: " + scene_root.name, "BaseItem")
 	

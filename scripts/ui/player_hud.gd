@@ -62,103 +62,26 @@ func _create_player_panels() -> void:
 	
 	Logger.debug("Created " + str(player_panels.size()) + " player panels", "PlayerHUD")
 
-## Create individual player panel with lives and health percentage
+## Create individual player panel using UIFactory
 func _create_player_panel(player_data: PlayerData, player_id: int) -> Control:
-	Logger.debug("Creating panel for " + player_data.player_name, "PlayerHUD")
-	var panel = PanelContainer.new()
-	panel.name = "Player" + str(player_id) + "Panel"
+	Logger.debug("Creating panel for " + player_data.player_name + " using UIFactory", "PlayerHUD")
 	
-	# Panel styling
-	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = player_colors[player_id]
-	style_box.bg_color.a = 0.8  # Semi-transparent
-	style_box.corner_radius_top_left = 10
-	style_box.corner_radius_top_right = 10
-	style_box.corner_radius_bottom_left = 10
-	style_box.corner_radius_bottom_right = 10
-	style_box.border_width_left = 3
-	style_box.border_width_right = 3
-	style_box.border_width_top = 3
-	style_box.border_width_bottom = 3
-	style_box.border_color = player_colors[player_id]
-	panel.add_theme_stylebox_override("panel", style_box)
+	# Use UIFactory for consistent player panel creation
+	var panel: Control = UIFactory.create_player_panel(player_data, player_id, player_colors)
+	if not panel:
+		Logger.error("Failed to create player panel through UIFactory", "PlayerHUD")
+		return null
 	
-	# Content container
-	var vbox = VBoxContainer.new()
-	panel.add_child(vbox)
-	
-	# Player name
-	var name_label = Label.new()
-	name_label.name = "NameLabel"
-	name_label.text = player_data.player_name
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.add_theme_color_override("font_color", Color.WHITE)
-	name_label.add_theme_font_size_override("font_size", 16)
-	vbox.add_child(name_label)
-	
-	# Lives display
-	var lives_label = Label.new()
-	lives_label.name = "LivesLabel"
-	lives_label.text = "Lives: " + str(player_data.current_lives)
-	lives_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lives_label.add_theme_color_override("font_color", Color.WHITE)
-	lives_label.add_theme_font_size_override("font_size", 14)
-	vbox.add_child(lives_label)
-	
-	# Health percentage display
-	var health_label = Label.new()
-	health_label.name = "HealthLabel"
-	health_label.text = str(int(player_data.get_health_percentage())) + "%"
-	health_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	health_label.add_theme_color_override("font_color", Color.WHITE)
-	health_label.add_theme_font_size_override("font_size", 18)
-	vbox.add_child(health_label)
-	
-	# Health bar (visual progress bar)
-	var health_bar = ProgressBar.new()
-	health_bar.name = "HealthBar"
-	health_bar.max_value = 100.0
-	health_bar.value = player_data.get_health_percentage()
-	health_bar.show_percentage = false
-	health_bar.custom_minimum_size = Vector2(100, 8)
-	
-	# Style the progress bar
-	var bar_style = StyleBoxFlat.new()
-	bar_style.bg_color = Color(0.2, 0.2, 0.2)
-	bar_style.corner_radius_top_left = 4
-	bar_style.corner_radius_top_right = 4
-	bar_style.corner_radius_bottom_left = 4
-	bar_style.corner_radius_bottom_right = 4
-	health_bar.add_theme_stylebox_override("background", bar_style)
-	
-	var fill_style = StyleBoxFlat.new()
-	fill_style.bg_color = Color.GREEN
-	fill_style.corner_radius_top_left = 4
-	fill_style.corner_radius_top_right = 4
-	fill_style.corner_radius_bottom_left = 4
-	fill_style.corner_radius_bottom_right = 4
-	health_bar.add_theme_stylebox_override("fill", fill_style)
-	
-	vbox.add_child(health_bar)
-	
-	# Status label (for ragdoll, etc.)
-	var status_label = Label.new()
-	status_label.name = "StatusLabel"
-	status_label.text = "ALIVE" if player_data.is_alive else "DEAD"
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.add_theme_color_override("font_color", Color.WHITE)
-	status_label.add_theme_font_size_override("font_size", 10)
-	vbox.add_child(status_label)
-	
-	# Set minimum size
-	panel.custom_minimum_size = Vector2(140, 100)
-	
-	print("   ✅ Panel created with children: ", vbox.get_child_count())
-	for i in range(vbox.get_child_count()):
-		var child = vbox.get_child(i)
-		print("     [", i, "] ", child.name, " (", child.get_class(), ")")
-		if child is Label:
-			print("         Text: '", child.text, "'")
+	# Debug panel structure
+	print("   ✅ Panel created via UIFactory with name: ", panel.name)
+	var vbox = panel.get_child(0) as VBoxContainer
+	if vbox:
+		print("   ✅ VBox found with children: ", vbox.get_child_count())
+		for i in range(vbox.get_child_count()):
+			var child = vbox.get_child(i)
+			print("     [", i, "] ", child.name, " (", child.get_class(), ")")
+			if child is Label:
+				print("         Text: '", child.text, "'")
 	
 	return panel
 

@@ -216,6 +216,7 @@ func resume_minigame() -> void:
 	_on_resume()
 
 ## Force cleanup and termination (for emergency exits)
+## Now includes proper cleanup timing - all children inherit this automatically
 func abort_minigame() -> void:
 	Logger.warning("Aborting minigame: " + minigame_name, "BaseMinigame")
 	
@@ -227,6 +228,11 @@ func abort_minigame() -> void:
 		abort_result.duration = Time.get_unix_time_from_system() - start_time if start_time > 0 else 0.0
 		
 		end_minigame(abort_result)
+		
+		# Wait for cleanup to complete before allowing scene transitions
+		# This ensures HUD cleanup and other systems finish properly
+		await get_tree().process_frame
+		await get_tree().process_frame
 	
 	# Virtual implementation hook
 	_on_abort()

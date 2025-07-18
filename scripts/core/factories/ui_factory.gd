@@ -1,6 +1,7 @@
 class_name UIFactory
 extends RefCounted
 
+# Enums and configuration classes defined first to avoid parser errors
 enum UIElementType {
 	BUTTON,
 	LABEL,
@@ -11,9 +12,59 @@ enum UIElementType {
 	HUD_ELEMENT
 }
 
+enum NotificationType {
+	INFO,
+	WARNING,
+	ERROR,
+	SUCCESS
+}
+
+# Base configuration for UI elements
+class UIElementConfig extends Resource:
+	@export var element_name: String = ""
+	@export var text: String = ""
+	@export var description: String = ""
+	@export var size: Vector2 = Vector2.ZERO
+	@export var position: Vector2 = Vector2.ZERO
+	@export var anchor_preset: int = -1
+	@export var theme_path: String = ""
+	@export var action_method: String = ""
+	@export var action_params: Dictionary = {}
+
+	# Progress bar specific properties
+	@export var min_value: float = 0.0
+	@export var max_value: float = 100.0
+	@export var initial_value: float = 0.0
+
+	# Label specific properties
+	@export var horizontal_alignment: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT
+	@export var vertical_alignment: VerticalAlignment = VERTICAL_ALIGNMENT_TOP
+
+# ScreenConfig now defined in separate file: configs/ui_configs/screen_config.gd
+
+# HUD configuration
+class HUDConfig extends Resource:
+	@export var hud_id: String = ""
+	@export var hud_name: String = ""
+	@export var hud_scene: PackedScene
+	@export var player_elements: Array[UIElementConfig] = []
+
+# Menu configuration
+class MenuConfig extends Resource:
+	@export var menu_name: String = ""
+	@export var menu_items: Array[UIElementConfig] = []
+	@export var layout_type: String = "vertical"  # "vertical", "horizontal", "grid"
+
+# Notification configuration
+class NotificationConfig extends Resource:
+	@export var background_color: Color = Color.WHITE
+	@export var text_color: Color = Color.BLACK
+	@export var font_size: int = 16
+	@export var duration: float = 3.0
+
 # Static factory methods for UI creation
-static func create_ui_element(element_type: UIElementType, config: UIElementConfig = null) -> Control:
-	var element: Control
+static func create_ui_element(element_type: UIElementType, config: UIElementConfig = null) -> Node:
+	var element: Node
 	
 	match element_type:
 		UIElementType.BUTTON:
@@ -34,8 +85,9 @@ static func create_ui_element(element_type: UIElementType, config: UIElementConf
 			Logger.error("Unknown UI element type: " + str(element_type))
 			return null
 	
-	if element and config:
-		_apply_common_styling(element, config)
+	# Only apply styling to Control nodes
+	if element and config and element is Control:
+		_apply_common_styling(element as Control, config)
 	
 	return element
 
@@ -46,10 +98,115 @@ static func create_screen(screen_id: String) -> Control:
 		return null
 	
 	var screen: Control = screen_config.screen_scene.instantiate()
-	if screen and screen_config.styling:
+	if screen:
 		_apply_screen_styling(screen, screen_config)
 	
 	return screen
+
+## Get screen PackedScene for UIManager integration
+static func get_screen_scene(screen_id: String) -> PackedScene:
+	var screen_config: ScreenConfig = _load_screen_config(screen_id)
+	if not screen_config:
+		Logger.error("Failed to load screen config for: " + screen_id)
+		return null
+	
+	return screen_config.screen_scene
+
+## Create specialized player panel for HUD display
+static func create_player_panel(player_data: PlayerData, player_id: int, player_colors: Array[Color]) -> Control:
+	if player_id >= player_colors.size():
+		Logger.error("Player ID " + str(player_id) + " out of range for color array", "UIFactory")
+		return null
+	
+	var panel = PanelContainer.new()
+	panel.name = "Player" + str(player_id) + "Panel"
+	
+	# Panel styling
+	var style_box = StyleBoxFlat.new()
+	style_box.bg_color = player_colors[player_id]
+	style_box.bg_color.a = 0.8  # Semi-transparent
+	style_box.corner_radius_top_left = 10
+	style_box.corner_radius_top_right = 10
+	style_box.corner_radius_bottom_left = 10
+	style_box.corner_radius_bottom_right = 10
+	style_box.border_width_left = 3
+	style_box.border_width_right = 3
+	style_box.border_width_top = 3
+	style_box.border_width_bottom = 3
+	style_box.border_color = player_colors[player_id]
+	panel.add_theme_stylebox_override("panel", style_box)
+	
+	# Content container
+	var vbox = VBoxContainer.new()
+	panel.add_child(vbox)
+	
+	# Player name
+	var name_label = Label.new()
+	name_label.name = "NameLabel"
+	name_label.text = player_data.player_name
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.add_theme_color_override("font_color", Color.WHITE)
+	name_label.add_theme_font_size_override("font_size", 16)
+	vbox.add_child(name_label)
+	
+	# Lives display
+	var lives_label = Label.new()
+	lives_label.name = "LivesLabel"
+	lives_label.text = "Lives: " + str(player_data.current_lives)
+	lives_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lives_label.add_theme_color_override("font_color", Color.WHITE)
+	lives_label.add_theme_font_size_override("font_size", 14)
+	vbox.add_child(lives_label)
+	
+	# Health percentage display
+	var health_label = Label.new()
+	health_label.name = "HealthLabel"
+	health_label.text = str(int(player_data.get_health_percentage())) + "%"
+	health_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	health_label.add_theme_color_override("font_color", Color.WHITE)
+	health_label.add_theme_font_size_override("font_size", 18)
+	vbox.add_child(health_label)
+	
+	# Health bar (visual progress bar)
+	var health_bar = ProgressBar.new()
+	health_bar.name = "HealthBar"
+	health_bar.max_value = 100.0
+	health_bar.value = player_data.get_health_percentage()
+	health_bar.show_percentage = false
+	health_bar.custom_minimum_size = Vector2(100, 8)
+	
+	# Style the progress bar
+	var bar_style = StyleBoxFlat.new()
+	bar_style.bg_color = Color(0.2, 0.2, 0.2)
+	bar_style.corner_radius_top_left = 4
+	bar_style.corner_radius_top_right = 4
+	bar_style.corner_radius_bottom_left = 4
+	bar_style.corner_radius_bottom_right = 4
+	health_bar.add_theme_stylebox_override("background", bar_style)
+	
+	var fill_style = StyleBoxFlat.new()
+	fill_style.bg_color = Color.GREEN
+	fill_style.corner_radius_top_left = 4
+	fill_style.corner_radius_top_right = 4
+	fill_style.corner_radius_bottom_left = 4
+	fill_style.corner_radius_bottom_right = 4
+	health_bar.add_theme_stylebox_override("fill", fill_style)
+	
+	vbox.add_child(health_bar)
+	
+	# Status label (for ragdoll, etc.)
+	var status_label = Label.new()
+	status_label.name = "StatusLabel"
+	status_label.text = "ALIVE" if player_data.is_alive else "DEAD"
+	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status_label.add_theme_color_override("font_color", Color.WHITE)
+	status_label.add_theme_font_size_override("font_size", 10)
+	vbox.add_child(status_label)
+	
+	# Set minimum size
+	panel.custom_minimum_size = Vector2(140, 100)
+	
+	return panel
 
 static func create_menu_system(menu_config: MenuConfig) -> Control:
 	if not menu_config:
@@ -60,15 +217,16 @@ static func create_menu_system(menu_config: MenuConfig) -> Control:
 	
 	# Create menu items
 	for item_config in menu_config.menu_items:
-		var menu_item: Control = create_ui_element(UIElementType.BUTTON, item_config)
-		if menu_item:
-			menu_container.add_child(menu_item)
+		var menu_item: Node = create_ui_element(UIElementType.BUTTON, item_config)
+		if menu_item and menu_item is Control:
+			var menu_control: Control = menu_item as Control
+			menu_container.add_child(menu_control)
 			
 			# Connect menu item signals if specified
 			if item_config.action_method != "":
-				if menu_item.has_signal("pressed"):
+				if menu_control.has_signal("pressed"):
 					# Connect to EventBus for global menu actions
-					menu_item.pressed.connect(_handle_menu_action.bind(item_config.action_method, item_config.action_params))
+					menu_control.pressed.connect(_handle_menu_action.bind(item_config.action_method, item_config.action_params))
 	
 	return menu_container
 
@@ -166,7 +324,7 @@ static func _create_dialog(config: UIElementConfig) -> AcceptDialog:
 	if config:
 		dialog.title = config.text
 		dialog.dialog_text = config.description
-		_set_element_size(dialog, config)
+		# Note: AcceptDialog is a Window, not Control, so no size setting needed
 	
 	return dialog
 
@@ -204,11 +362,16 @@ static func _apply_screen_styling(screen: Control, config: ScreenConfig) -> void
 	if not screen or not config:
 		return
 	
-	if config.styling.background_color != Color.TRANSPARENT:
+	if config.background_color != Color.TRANSPARENT:
 		var background: ColorRect = ColorRect.new()
-		background.color = config.styling.background_color
+		background.color = config.background_color
 		screen.add_child(background)
 		screen.move_child(background, 0)  # Move to background
+	
+	if config.theme_path != "":
+		var theme: Theme = load(config.theme_path) as Theme
+		if theme:
+			screen.theme = theme
 
 static func _apply_notification_styling(notification: Panel, label: Label, config: NotificationConfig) -> void:
 	if config.background_color != Color.TRANSPARENT:
@@ -255,64 +418,4 @@ static func _get_notification_config(notification_type: NotificationType) -> Not
 		return load(config_path) as NotificationConfig
 	else:
 		# Fallback to info config if specific type doesn't exist
-		return load("res://configs/ui_configs/notifications/info.tres") as NotificationConfig
-
-# Enums and configuration classes
-enum NotificationType {
-	INFO,
-	WARNING,
-	ERROR,
-	SUCCESS
-}
-
-# Base configuration for UI elements
-class UIElementConfig extends Resource:
-@export var element_name: String = ""
-@export var text: String = ""
-@export var description: String = ""
-@export var size: Vector2 = Vector2.ZERO
-@export var position: Vector2 = Vector2.ZERO
-@export var anchor_preset: int = -1
-@export var theme_path: String = ""
-@export var action_method: String = ""
-@export var action_params: Dictionary = {}
-
-# Progress bar specific properties
-@export var min_value: float = 0.0
-@export var max_value: float = 100.0
-@export var initial_value: float = 0.0
-
-# Label specific properties
-@export var horizontal_alignment: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT
-@export var vertical_alignment: VerticalAlignment = VERTICAL_ALIGNMENT_TOP
-
-# Screen configuration
-class ScreenConfig extends Resource:
-@export var screen_id: String = ""
-@export var screen_name: String = ""
-@export var screen_scene: PackedScene
-@export var styling: ScreenStyling
-
-class ScreenStyling extends Resource:
-@export var background_color: Color = Color.TRANSPARENT
-@export var theme_path: String = ""
-
-# HUD configuration
-class HUDConfig extends Resource:
-@export var hud_id: String = ""
-@export var hud_name: String = ""
-@export var hud_scene: PackedScene
-@export var player_elements: Array[UIElementConfig] = []
-
-# Menu configuration
-class MenuConfig extends Resource:
-@export var menu_name: String = ""
-@export var menu_items: Array[UIElementConfig] = []
-@export var layout_type: String = "vertical"  # "vertical", "horizontal", "grid"
-
-# Notification configuration
-class NotificationConfig extends Resource:
-@export var background_color: Color = Color.WHITE
-@export var text_color: Color = Color.BLACK
-@export var font_size: int = 16
-@export var duration: float = 3.0 
+		return load("res://configs/ui_configs/notifications/info.tres") as NotificationConfig 

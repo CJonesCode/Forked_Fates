@@ -76,8 +76,8 @@ func _shoot() -> bool:
 	if shoot_direction == Vector2.ZERO:
 		return false
 	
-	# Get bullet from pool
-	var bullet: Node = PoolManager.get_bullet()
+	# Get bullet from pool using item ID
+	var bullet: Node = PoolManager.get_item("bullet")
 	if bullet:
 		# Cast to Bullet type for proper access to methods
 		var bullet_obj: Bullet = bullet as Bullet
@@ -151,7 +151,9 @@ func _start_reload() -> void:
 	
 	is_reloading = true
 	reload_timer = 0.0
-	var holder_name = holder.player_data.player_name if holder.player_data else "Unknown Player"
+	var holder_name = "No Holder"  # Default for dropped weapons
+	if holder and holder.player_data:
+		holder_name = holder.player_data.player_name
 	Logger.item(item_name, "reloading by " + holder_name, "Pistol")
 
 ## Finish reload process
@@ -159,7 +161,9 @@ func _finish_reload() -> void:
 	is_reloading = false
 	reload_timer = 0.0
 	current_ammo = max_ammo
-	var holder_name = holder.player_data.player_name if holder.player_data else "Unknown Player"
+	var holder_name = "No Holder"  # Default for dropped weapons
+	if holder and holder.player_data:
+		holder_name = holder.player_data.player_name
 	Logger.item(item_name, "reload finished by " + holder_name, "Pistol")
 
 ## Get weapon status for UI
@@ -177,4 +181,16 @@ func get_item_info() -> Dictionary:
 	info["ammo"] = current_ammo
 	info["max_ammo"] = max_ammo
 	info["is_reloading"] = is_reloading
-	return info 
+	return info
+
+## Cleanup pistol properly to prevent RID leaks (required by standards)
+func _exit_tree() -> void:
+	# Clear shooter references to prevent circular references
+	if holder:
+		holder = null
+	
+	# Clear any audio references
+	if shot_audio:
+		shot_audio = null
+	
+	Logger.debug("Pistol cleanup completed", "Pistol") 

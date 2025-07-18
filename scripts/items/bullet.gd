@@ -155,7 +155,7 @@ func _destroy_bullet() -> void:
 	# Return to pool instead of destroying
 	if is_pooled:
 		Logger.debug("Bullet returned to pool", "Bullet")
-		PoolManager.return_bullet(self)
+		PoolManager.return_item(self, "bullet")
 	else:
 		Logger.debug("Bullet destroyed (not pooled)", "Bullet")
 		queue_free()

@@ -95,20 +95,30 @@ func _setup_rules_section(rules: Array[String]) -> void:
 		rules_container.visible = false
 		return
 	
-	# Add header
-	var header: Label = Label.new()
-	header.text = "RULES:"
-	header.add_theme_font_size_override("font_size", 18)
-	header.add_theme_color_override("font_color", Color.YELLOW)
-	rules_container.add_child(header)
+	# Add header using UIFactory
+	var header_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
+	header_config.element_name = "RulesHeader"
+	header_config.text = "RULES:"
 	
-	# Add each rule
+	var header: Node = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, header_config)
+	if header and header is Label:
+		var header_label: Label = header as Label
+		header_label.add_theme_font_size_override("font_size", 18)
+		header_label.add_theme_color_override("font_color", Color.YELLOW)
+		rules_container.add_child(header_label)
+	
+	# Add each rule using UIFactory
 	for i in range(rules.size()):
-		var rule_label: Label = Label.new()
-		rule_label.text = "• " + rules[i]
-		rule_label.add_theme_font_size_override("font_size", 14)
-		rule_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		rules_container.add_child(rule_label)
+		var rule_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
+		rule_config.element_name = "Rule" + str(i)
+		rule_config.text = "• " + rules[i]
+		
+		var rule_label: Node = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, rule_config)
+		if rule_label and rule_label is Label:
+			var label: Label = rule_label as Label
+			label.add_theme_font_size_override("font_size", 14)
+			label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			rules_container.add_child(label)
 	
 	rules_container.visible = true
 
@@ -125,19 +135,29 @@ func _setup_controls_section(controls: Dictionary) -> void:
 		controls_container.visible = false
 		return
 	
-	# Add header
-	var header: Label = Label.new()
-	header.text = "CONTROLS:"
-	header.add_theme_font_size_override("font_size", 18)
-	header.add_theme_color_override("font_color", Color.CYAN)
-	controls_container.add_child(header)
+	# Add header using UIFactory
+	var header_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
+	header_config.element_name = "ControlsHeader"
+	header_config.text = "CONTROLS:"
 	
-	# Add each control
+	var header: Node = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, header_config)
+	if header and header is Label:
+		var header_label: Label = header as Label
+		header_label.add_theme_font_size_override("font_size", 18)
+		header_label.add_theme_color_override("font_color", Color.CYAN)
+		controls_container.add_child(header_label)
+	
+	# Add each control using UIFactory
 	for action in controls.keys():
-		var control_label: Label = Label.new()
-		control_label.text = action + ": " + str(controls[action])
-		control_label.add_theme_font_size_override("font_size", 14)
-		controls_container.add_child(control_label)
+		var control_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
+		control_config.element_name = "Control_" + action
+		control_config.text = action + ": " + str(controls[action])
+		
+		var control_label: Node = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, control_config)
+		if control_label and control_label is Label:
+			var label: Label = control_label as Label
+			label.add_theme_font_size_override("font_size", 14)
+			controls_container.add_child(label)
 	
 	controls_container.visible = true
 
@@ -154,20 +174,30 @@ func _setup_tips_section(tips: Array[String]) -> void:
 		tips_container.visible = false
 		return
 	
-	# Add header
-	var header: Label = Label.new()
-	header.text = "TIPS:"
-	header.add_theme_font_size_override("font_size", 18)
-	header.add_theme_color_override("font_color", Color.GREEN)
-	tips_container.add_child(header)
+	# Add header using UIFactory
+	var header_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
+	header_config.element_name = "TipsHeader"
+	header_config.text = "TIPS:"
 	
-	# Add each tip
-	for tip in tips:
-		var tip_label: Label = Label.new()
-		tip_label.text = "💡 " + tip
-		tip_label.add_theme_font_size_override("font_size", 12)
-		tip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		tips_container.add_child(tip_label)
+	var header: Node = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, header_config)
+	if header and header is Label:
+		var header_label: Label = header as Label
+		header_label.add_theme_font_size_override("font_size", 18)
+		header_label.add_theme_color_override("font_color", Color.GREEN)
+		tips_container.add_child(header_label)
+	
+	# Add each tip using UIFactory
+	for i in range(tips.size()):
+		var tip_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
+		tip_config.element_name = "Tip" + str(i)
+		tip_config.text = "💡 " + tips[i]
+		
+		var tip_label: Node = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, tip_config)
+		if tip_label and tip_label is Label:
+			var label: Label = tip_label as Label
+			label.add_theme_font_size_override("font_size", 12)
+			label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			tips_container.add_child(label)
 	
 	tips_container.visible = true
 

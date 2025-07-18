@@ -19,8 +19,8 @@ func _ready() -> void:
 	tags = ["combat", "elimination", "physics"]
 	
 	tutorial_rules = [
-		"Each player starts with 3 lives",
-		"Lose a life when your health reaches 0",
+		"Each player starts with 3 lives (3 deaths allowed)",
+		"Lose a life each time your health reaches 0",
 		"Players respawn after 3 seconds if they have lives remaining",
 		"Items spawn around the arena - collect them for advantages",
 		"Last player standing wins!"
@@ -33,16 +33,14 @@ func _ready() -> void:
 	]
 	tutorial_duration = 7.0
 	
-	# ONLY initialize from GameManager if context hasn't been set yet
-	# This prevents double initialization
-	if not context:
-		Logger.system("Context not set - checking for fallback initialization", "SuddenDeathMinigame")
-		_initialize_from_game_manager()
-	else:
-		Logger.system("Context already set - skipping fallback initialization", "SuddenDeathMinigame")
+	# Don't auto-initialize in _ready() - wait for explicit initialization
+	# The GameManager will call initialize_minigame() and start_minigame() when appropriate
+	Logger.system("SuddenDeathMinigame ready - waiting for explicit initialization", "SuddenDeathMinigame")
 
 ## Initialize minigame context from GameManager (fallback for direct scene loading)
+## DEPRECATED: This method should not be called automatically in _ready()
 func _initialize_from_game_manager() -> void:
+	Logger.warning("_initialize_from_game_manager() called - this should only be used for standalone testing", "SuddenDeathMinigame")
 	if not GameManager or GameManager.players.is_empty():
 		Logger.warning("No players available from GameManager for minigame initialization", "SuddenDeathMinigame")
 		return
@@ -127,7 +125,10 @@ func _update_game_timer_display() -> void:
 		game_timer_label.text = "Time: %02d:%02d" % [minutes, seconds]
 
 func _on_back_button_pressed() -> void:
-	abort_minigame()
+	# BaseMinigame.abort_minigame() now handles cleanup timing automatically
+	await abort_minigame()
+	
+	# Transition after cleanup is complete
 	EventBus.request_scene_transition("res://scenes/ui/map_view.tscn")
 	GameManager.transition_to_map_view()
 
@@ -146,19 +147,29 @@ func _on_physics_victory(winner_data: Dictionary, result: MinigameResult) -> voi
 	})
 
 ## Handle player death for Sudden Death specific rules (3 lives elimination)
+## Lives Semantics: 3 lives = 3 deaths allowed before elimination
+## - Start with 3 lives
+## - Die → 2 lives, can respawn
+## - Die → 1 life, can respawn  
+## - Die → 0 lives, eliminated (no respawn)
 func _on_sudden_death_player_died(player_id: int) -> void:
 	var player_data: PlayerData = GameManager.get_player_data(player_id)
 	if not player_data:
 		return
 	
-	# Decrement lives for Sudden Death mode
+	# Prevent negative lives - only decrement if player has lives remaining
+	if player_data.current_lives <= 0:
+		Logger.warning("Sudden Death: " + player_data.player_name + " died but already has 0 lives - not decrementing further", "SuddenDeathMinigame")
+		return
+	
+	# Decrement lives for Sudden Death mode (one death used)
 	player_data.current_lives -= 1
 	Logger.game_flow("Sudden Death: " + player_data.player_name + " died (Lives remaining: " + str(player_data.current_lives) + ")", "SuddenDeathMinigame")
 	
 	# Update UI
 	EventBus.emit_player_lives_changed(player_id, player_data.current_lives)
 	
-	# Check if player is eliminated (out of lives)
+	# Check if player is eliminated (out of deaths allowed)
 	if player_data.is_out_of_lives():
 		Logger.game_flow("Sudden Death: " + player_data.player_name + " ELIMINATED - out of lives!", "SuddenDeathMinigame")
 		
