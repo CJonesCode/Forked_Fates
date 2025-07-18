@@ -80,8 +80,8 @@ func enter_ragdoll_state(disable_auto_recovery: bool = false) -> void:
 		drop_velocity.x += randf_range(-100.0, 100.0)  # Random horizontal spread
 		inventory_component.force_drop_item(drop_velocity)
 	
-	# Create ragdoll physics body
-	_create_ragdoll_body()
+	# Create ragdoll physics body (deferred to avoid physics conflicts)
+	call_deferred("_create_ragdoll_body")
 	
 	# Hide original player body
 	player.visible = false

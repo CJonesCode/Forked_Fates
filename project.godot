@@ -25,6 +25,10 @@ PerformanceDashboard="*res://scripts/core/performance_dashboard.gd"
 DataManager="*res://scripts/core/data_manager.gd"
 ConfigManager="*res://scripts/core/config_manager.gd"
 
+[debug]
+
+file_logging/enable_file_logging=true
+
 [input]
 
 p1_move_left={

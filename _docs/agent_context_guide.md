@@ -1,6 +1,6 @@
-# Forked Fates - AI Agent Context Guide
+ # Forked Fates - AI Agent Context Guide
 
-**Version**: 4.7 (Weapon System & UI Management Restored)  
+**Version**: 4.8 (Minigame-Controlled Lives & Victory System)  
 **Date**: Current Implementation State - Production Ready  
 **Godot Version**: 4.4.1  
 **Purpose**: Complete context reference for AI agents working on this codebase
@@ -12,7 +12,7 @@
 - **Slay the Spire-style map progression** for structured gameplay
 - **Mario Party-style minigames** for varied experiences
 
-**Current Status**: **Production-ready with zero parse errors, zero runtime errors, zero RID leaks, zero GDScript warnings, and fully operational weapon system**. All critical bugs resolved using architectural solutions (not workarounds). Proper inheritance hierarchy established with full type safety. Modern Godot 4.4 syntax throughout with clean class_name patterns. **Configuration loading system fully operational with proper .tres resource format and eliminated redundancy**. **Memory management completely optimized with zero resource leaks on shutdown**. **Perfect code quality with zero static analysis warnings**. **Weapon system fully restored and functional with proper object pooling, signal management, and UI cleanup**. **Universal damage system implemented across all minigame types**.
+**Current Status**: **Production-ready with zero parse errors, zero runtime errors, zero RID leaks, zero GDScript warnings, and fully operational weapon system**. All critical bugs resolved using architectural solutions (not workarounds). Proper inheritance hierarchy established with full type safety. Modern Godot 4.4 syntax throughout with clean class_name patterns. **Configuration loading system fully operational with proper .tres resource format and eliminated redundancy**. **Memory management completely optimized with zero resource leaks on shutdown**. **Perfect code quality with zero static analysis warnings**. **Weapon system fully restored and functional with proper object pooling, signal management, and UI cleanup**. **Universal damage system implemented across all minigame types**. **Minigame-controlled lives and victory system provides complete flexibility for different game modes**.
 
 ## 🏗️ Architecture Summary
 
@@ -31,6 +31,8 @@
 - ✅ **Weapon System**: Fully operational with pistols, bullets, and melee weapons
 - ✅ **Universal Damage System**: All minigame types support damage with specialized handling
 - ✅ **Minigame Framework**: Flexible with 3 specialization levels + automatic UI cleanup
+- ✅ **Lives & Victory System**: Minigame-controlled for maximum flexibility (infinite lives, elimination, etc.)
+- ✅ **Respawn Management**: Minigame-controllable blocking system for different game modes
 - ✅ **UI Management**: Centralized with proper HUD lifecycle management
 - ✅ **Data Persistence**: Versioned save/load with validation, extracted data structures
 - ✅ **Performance Systems**: Object pooling and monitoring with optimized logging
@@ -245,7 +247,80 @@ func _on_damage_reported(...) -> void:
     })  # Apply on their next turn
 ```
 
-### **5. Modern Godot 4.x Syntax Patterns**
+### **5. Minigame-Controlled Lives & Victory System** ⭐ **NEW**
+
+**The Problem**: Different minigames need different lives/respawn rules - should this be automatic?
+
+**Previous Approach**: ❌ "Automatically decrement lives globally when any player dies"
+```gdscript
+GameManager._on_player_died():  # Always decrement lives
+    player_data.current_lives -= 1  # Too rigid!
+```
+
+**Problem with Global Automation**:
+- **Infinite Lives Games**: Can't have players respawn forever
+- **King of the Hill**: Lives might decrement based on zone control, not death
+- **Last Stand**: Players might start with 1 life only
+- **Survival Mode**: Lives might increase over time or with pickups
+
+**Better Architecture**: ✅ **"Each minigame controls its own rules"**
+
+**Minigame-Controlled Implementation**:
+```gdscript
+# ✅ RespawnManager - minigames control who can respawn
+respawn_manager.block_player_respawn(player_id)     # Prevent respawning
+respawn_manager.unblock_player_respawn(player_id)   # Allow respawning again
+
+# ✅ VictoryConditionManager - minigames control elimination
+victory_condition_manager.eliminate_player(player_id)  # Manual elimination
+
+# ✅ EventBus - minigames control UI updates
+EventBus.emit_player_lives_changed(player_id, new_lives)  # Update UI when needed
+```
+
+**Different Minigame Examples**:
+```gdscript
+# ✅ Sudden Death - 3 Lives Elimination
+class_name SuddenDeathMinigame extends PhysicsMinigame
+func _on_sudden_death_player_died(player_id: int) -> void:
+    player_data.current_lives -= 1  # Decrement for this mode
+    EventBus.emit_player_lives_changed(player_id, player_data.current_lives)
+    
+    if player_data.is_out_of_lives():
+        respawn_manager.block_player_respawn(player_id)
+        victory_condition_manager.eliminate_player(player_id)
+
+# ✅ Infinite Lives - Never Eliminate
+class_name InfiniteLivesMinigame extends PhysicsMinigame
+func _on_physics_initialize() -> void:
+    # Never connect to death events - unlimited respawns
+    victory_condition_manager.victory_type = VictoryConditionManager.VictoryType.SCORE
+
+# ✅ King of the Hill - Zone-Based Lives
+class_name KingOfHillMinigame extends PhysicsMinigame
+func _on_player_left_hill(player: BasePlayer) -> void:
+    if outside_hill_too_long(player):
+        player.player_data.current_lives -= 1  # Custom lives logic
+        if player.player_data.is_out_of_lives():
+            respawn_manager.block_player_respawn(player.player_data.player_id)
+
+# ✅ Last Stand - Start with 1 Life
+class_name LastStandMinigame extends PhysicsMinigame  
+func _on_physics_initialize() -> void:
+    for player_data in context.participating_players:
+        player_data.current_lives = 1      # Override default
+        player_data.max_lives = 1
+        EventBus.emit_player_lives_changed(player_data.player_id, 1)
+```
+
+**Benefits of Minigame Control**:
+- ✅ **Flexibility**: Each game mode has complete freedom
+- ✅ **Clarity**: Lives logic is explicit and visible in each minigame
+- ✅ **Testing**: Easy to test different rule sets independently
+- ✅ **Modding**: Custom minigames can implement any lives system
+- ✅ **UI Consistency**: UI updates work the same regardless of rules
+
+### **6. Modern Godot 4.x Syntax Patterns**
 ```gdscript
 # ✅ CORRECT: Super method calls (modern syntax)
 func get_item_info() -> Dictionary:
@@ -271,7 +346,7 @@ var temp_holder: BasePlayer = holder  # Preserve during _exit_tree()
 holder = temp_holder  # Restore after reparenting
 ```
 
-### **6. Factory Pattern Usage**
+### **7. Factory Pattern Usage**
 ```gdscript
 # Create players with configuration
 var player: BasePlayer = PlayerFactory.create_player("standard", player_data)
@@ -283,7 +358,7 @@ var bullet: Bullet = ItemFactory.create_item("bullet") as Bullet
 var minigame: BaseMinigame = MinigameFactory.create_minigame("sudden_death", context)
 ```
 
-### **7. Configuration System**
+### **8. Configuration System**
 ```gdscript
 # Configurations load successfully with proper .tres resource format
 var config: PlayerConfig = ConfigManager.get_player_config("standard")
@@ -539,7 +614,82 @@ func _on_damage_reported(victim_id: int, attacker_id: int, damage: int, source_n
 # ✅ Each minigame type only implements: Damage effect specific to their game
 ```
 
-## 🏗️ Recent Architectural Changes (v4.7)
+### **Minigame-Controlled Lives System Patterns** ⭐ **NEW**
+```gdscript
+# ✅ Sudden Death - 3 Lives Elimination (current implementation)
+class_name SuddenDeathMinigame extends PhysicsMinigame
+func _on_physics_initialize() -> void:
+    EventBus.player_died.connect(_on_sudden_death_player_died)
+
+func _on_sudden_death_player_died(player_id: int) -> void:
+    var player_data: PlayerData = GameManager.get_player_data(player_id)
+    player_data.current_lives -= 1  # Decrement for this mode only
+    EventBus.emit_player_lives_changed(player_id, player_data.current_lives)
+    
+    if player_data.is_out_of_lives():
+        respawn_manager.block_player_respawn(player_id)       # Stop respawning
+        victory_condition_manager.eliminate_player(player_id) # Remove from game
+
+# ✅ Infinite Lives - Unlimited Respawns
+class_name InfiniteLivesMinigame extends PhysicsMinigame
+func _on_physics_initialize() -> void:
+    # Don't connect to death events - never decrement lives
+    victory_condition_manager.victory_type = VictoryConditionManager.VictoryType.SCORE
+    victory_condition_manager.target_score = 10  # Win by score instead
+
+# ✅ King of the Hill - Zone-Based Lives Loss
+class_name KingOfHillMinigame extends PhysicsMinigame
+func _on_physics_initialize() -> void:
+    hill_zone.body_exited.connect(_on_player_left_hill)
+    # Death doesn't cost lives - only leaving the hill does
+
+func _on_player_left_hill(player: BasePlayer) -> void:
+    start_hill_timer(player)  # Custom mechanic
+
+func _on_hill_timer_expired(player: BasePlayer) -> void:
+    player.player_data.current_lives -= 1  # Custom lives decrement
+    EventBus.emit_player_lives_changed(player.player_data.player_id, player.player_data.current_lives)
+
+# ✅ Last Stand - Start with 1 Life Only
+class_name LastStandMinigame extends PhysicsMinigame
+func _on_physics_initialize() -> void:
+    # Override default lives at start
+    for player_data in context.participating_players:
+        player_data.current_lives = 1
+        player_data.max_lives = 1
+        EventBus.emit_player_lives_changed(player_data.player_id, 1)
+    
+    # Connect for immediate elimination on death
+    EventBus.player_died.connect(_on_last_stand_death)
+
+func _on_last_stand_death(player_id: int) -> void:
+    # Immediate elimination - no respawns
+    respawn_manager.block_player_respawn(player_id)
+    victory_condition_manager.eliminate_player(player_id)
+
+# ✅ Minigame Control Methods - Available to all minigames
+respawn_manager.block_player_respawn(player_id)     # Prevent respawning
+respawn_manager.unblock_player_respawn(player_id)   # Allow respawning again
+victory_condition_manager.eliminate_player(player_id) # Remove from victory tracking
+EventBus.emit_player_lives_changed(player_id, new_lives) # Update UI display
+```
+
+## 🏗️ Recent Architectural Changes (v4.8)
+
+### **Minigame-Controlled Lives & Victory System - Complete Flexibility** ✅
+**Problem**: Lives and victory conditions were globally automatic, preventing different game modes
+```
+GameManager._on_player_died(): player_data.current_lives -= 1  # Too rigid!
+VictoryConditionManager: Auto-eliminated players with 0 lives  # No flexibility!
+```
+
+**Solution**: Minigame-controlled system with complete flexibility
+- **Lives Management**: Each minigame decides if/when/how to decrement lives
+- **Respawn Control**: `block_player_respawn()` / `unblock_player_respawn()` methods
+- **Victory Control**: Manual `eliminate_player()` calls when minigame decides
+- **UI Updates**: Minigames emit `player_lives_changed` when appropriate
+
+**Result**: **Maximum flexibility for game modes** - infinite lives, elimination, zone-based, custom mechanics all supported
 
 ### **Weapon System Restoration - Complete Success** ✅
 **Problem**: Weapon system was completely broken - bullets not pooling, items disappearing, signal conflicts
@@ -619,7 +769,64 @@ Implementation: Virtual method with specialized overrides
 
 **Apply this pattern to ALL system design decisions!**
 
-### **2. Weapon System Development** ⭐ **UPDATED**
+### **2. Minigame-Controlled Lives & Victory System** ⭐ **NEW**
+
+**Core Principle**: Minigames have **complete control** over their lives and victory rules.
+
+**Global Systems Provide Tools, NOT Automatic Behavior**:
+```gdscript
+# ❌ DON'T: Assume automatic lives management
+# GameManager will NOT automatically decrement lives
+# VictoryConditionManager will NOT automatically eliminate players
+# RespawnManager will NOT automatically check lives
+
+# ✅ DO: Explicitly control your minigame's rules
+class_name MyMinigame extends PhysicsMinigame
+
+func _on_physics_initialize() -> void:
+    # Connect to events YOU want to handle
+    EventBus.player_died.connect(_on_my_minigame_player_died)
+
+func _on_my_minigame_player_died(player_id: int) -> void:
+    # YOUR minigame decides what happens on death
+    var player_data: PlayerData = GameManager.get_player_data(player_id)
+    
+    # Option 1: Traditional lives system
+    player_data.current_lives -= 1
+    EventBus.emit_player_lives_changed(player_id, player_data.current_lives)
+    if player_data.is_out_of_lives():
+        respawn_manager.block_player_respawn(player_id)
+        victory_condition_manager.eliminate_player(player_id)
+    
+    # Option 2: Infinite lives - do nothing special
+    # Option 3: Custom mechanics - your choice!
+```
+
+**Available Control Methods**:
+```gdscript
+# Respawn Control
+respawn_manager.block_player_respawn(player_id)     # Stop respawning
+respawn_manager.unblock_player_respawn(player_id)   # Allow respawning
+
+# Victory Control  
+victory_condition_manager.eliminate_player(player_id) # Manual elimination
+victory_condition_manager.victory_type = VictoryConditionManager.VictoryType.SCORE
+
+# UI Updates
+EventBus.emit_player_lives_changed(player_id, new_lives) # Update lives display
+
+# Lives Modification
+player_data.current_lives = new_value  # Set directly
+player_data.max_lives = new_max        # Change maximum
+```
+
+**Common Patterns**:
+- **Elimination Mode**: Connect to death events, decrement lives, eliminate when 0
+- **Infinite Lives**: Don't connect to death events, use score/time victory
+- **Custom Lives**: Connect to custom events (zone exit, objectives, etc.)
+- **Mixed Rules**: Different players can have different rules in same game
+
+### **3. Weapon System Development** ⭐ **UPDATED**
 ```gdscript
 # ✅ Proper bullet pooling with state management
 func _shoot() -> bool:
@@ -650,7 +857,7 @@ func _attach_to_player(player: BasePlayer) -> void:
     is_held = temp_is_held
 ```
 
-### **2. UI Management Best Practices** ⭐ **NEW**
+### **4. UI Management Best Practices** ⭐ **NEW**
 ```gdscript
 # ✅ UI cleanup is AUTOMATIC in BaseMinigame - don't duplicate
 class_name MyMinigame extends PhysicsMinigame
@@ -669,7 +876,7 @@ func _on_physics_end(result: MinigameResult) -> void:
     pass
 ```
 
-### **3. Object Pooling Best Practices** ⭐ **NEW**
+### **5. Object Pooling Best Practices** ⭐ **NEW**
 ```gdscript
 # ✅ Pool object state management
 func activate_from_pool() -> void:
@@ -691,7 +898,7 @@ func reset_for_pool() -> void:
     # DON'T reconnect here - let activate_from_pool() handle it
 ```
 
-### **4. Component System Patterns** 
+### **6. Component System Patterns** 
 ```gdscript
 # ✅ Use correct component names (InputComponent not InputController)
 var input_component: InputComponent = player.get_component(InputComponent)
@@ -703,7 +910,7 @@ func _initialize_component() -> void:
     current_health = max_health  # Use export value, not game_config default
 ```
 
-### **5. Modern Syntax Reminders**
+### **7. Modern Syntax Reminders**
 ```gdscript
 # ✅ Super calls - correct Godot 4.x syntax
 func custom_method() -> Dictionary:
@@ -725,16 +932,18 @@ if not signal_name.is_connected(callback_method):
 3. **Use proper inheritance**: Minigames use clean class_name hierarchy with automatic UI cleanup
 4. **Apply critical thinking pattern**: Question assumptions, find the right abstraction level for new systems
 5. **Use universal damage system**: All minigame types can handle damage with specialized implementations
-6. **Use modern syntax**: `super.method()`, Dictionary structures, direct static calls
-7. **Use existing patterns**: Factory, configuration, pooling systems in place
-8. **Check autoloads**: 9 global systems handle cross-cutting concerns
-9. **Implement proper cleanup**: Always add `_exit_tree()` methods for resource management
-10. **Prevent warnings**: Use type-safe ternary operators, descriptive variable names, proper static calls
-11. **Test regularly**: Use `/Applications/Godot.app/Contents/MacOS/Godot --headless --quit-after 3` to verify zero warnings
-12. **Know the weapon system**: Proper pooling, signal management, holder preservation patterns
-13. **Know the UI lifecycle**: BaseMinigame automatically handles HUD cleanup
-14. **Know the damage system**: Universal base handling with minigame-specific implementations
-15. **Know the syntax patterns**: 
+6. **Control lives and victory**: Minigames have complete control over their own rules (lives, respawn, elimination)
+7. **Use modern syntax**: `super.method()`, Dictionary structures, direct static calls
+8. **Use existing patterns**: Factory, configuration, pooling systems in place
+9. **Check autoloads**: 9 global systems handle cross-cutting concerns
+10. **Implement proper cleanup**: Always add `_exit_tree()` methods for resource management
+11. **Prevent warnings**: Use type-safe ternary operators, descriptive variable names, proper static calls
+12. **Test regularly**: Use `/Applications/Godot.app/Contents/MacOS/Godot --headless --quit-after 3` to verify zero warnings
+13. **Know the weapon system**: Proper pooling, signal management, holder preservation patterns
+14. **Know the UI lifecycle**: BaseMinigame automatically handles HUD cleanup
+15. **Know the damage system**: Universal base handling with minigame-specific implementations
+16. **Know the lives system**: Minigame-controlled lives, respawn blocking, victory conditions
+17. **Know the syntax patterns**: 
    - `super.method_name()` for parent calls
    - Dictionary for complex data structures
    - Direct static method calls: `ClassName.static_method()`

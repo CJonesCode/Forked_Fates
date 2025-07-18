@@ -66,6 +66,9 @@ func setup_players(player_data_array: Array[PlayerData]) -> void:
 func start_tracking() -> void:
 	is_tracking = true
 	Logger.system("Victory condition tracking started", "VictoryConditionManager")
+	
+	# NOTE: Minigames now control their own victory/elimination logic
+	# This manager provides tools but doesn't automatically eliminate players
 
 ## Stop tracking victory conditions
 func stop_tracking() -> void:

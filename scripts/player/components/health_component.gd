@@ -70,6 +70,11 @@ func heal(amount: int) -> void:
 ## Handle death logic
 func _handle_death() -> void:
 	died.emit()
+	
+	# Also emit to EventBus so respawn system can track it
+	if player and player.player_data:
+		EventBus.emit_player_died(player.player_data.player_id)
+	
 	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
 	Logger.player(player_name, "died", "HealthComponent")
 

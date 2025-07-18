@@ -385,6 +385,9 @@ func _on_player_died(player_id: int) -> void:
 		player_data.is_alive = false
 		player_data.current_health = 0
 		Logger.game_flow("Player died: " + player_data.player_name, "GameManager")
+		
+		# NOTE: Lives decrementing is now handled by individual minigames
+		# This allows for different game modes (infinite lives, survival, etc.)
 
 func _on_player_health_changed(player_id: int, new_health: int, max_health: int) -> void:
 	Logger.debug("GameManager received health change for Player " + str(player_id) + ": " + str(new_health), "GameManager")

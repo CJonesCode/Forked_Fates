@@ -78,7 +78,10 @@ func _on_physics_initialize() -> void:
 	
 	victory_condition_manager.victory_type = VictoryConditionManager.VictoryType.ELIMINATION
 	respawn_manager.respawn_delay = 3.0
-	respawn_manager.max_respawns = -1
+	respawn_manager.max_respawns = -1  # Use lives system instead
+	
+	# Connect to player death events for lives management
+	EventBus.player_died.connect(_on_sudden_death_player_died)
 	
 	# Show player HUD using UIManager
 	var player_data_array: Array[PlayerData] = []
@@ -140,4 +143,39 @@ func _on_physics_victory(winner_data: Dictionary, result: MinigameResult) -> voi
 		"minigame_type": "sudden_death",
 		"duration": game_timer,
 		"winner_name": result.statistics.get("winner_name", "No One")
-	}) 
+	})
+
+## Handle player death for Sudden Death specific rules (3 lives elimination)
+func _on_sudden_death_player_died(player_id: int) -> void:
+	var player_data: PlayerData = GameManager.get_player_data(player_id)
+	if not player_data:
+		return
+	
+	# Decrement lives for Sudden Death mode
+	player_data.current_lives -= 1
+	Logger.game_flow("Sudden Death: " + player_data.player_name + " died (Lives remaining: " + str(player_data.current_lives) + ")", "SuddenDeathMinigame")
+	
+	# Update UI
+	EventBus.emit_player_lives_changed(player_id, player_data.current_lives)
+	
+	# Check if player is eliminated (out of lives)
+	if player_data.is_out_of_lives():
+		Logger.game_flow("Sudden Death: " + player_data.player_name + " ELIMINATED - out of lives!", "SuddenDeathMinigame")
+		
+		# Block player from respawning
+		if respawn_manager:
+			respawn_manager.block_player_respawn(player_id)
+		
+		# Eliminate from victory tracking
+		if victory_condition_manager:
+			victory_condition_manager.eliminate_player(player_id)
+
+## Clean up Sudden Death specific connections
+func _on_physics_end(result: MinigameResult) -> void:
+	# Disconnect from death events
+	if EventBus.player_died.is_connected(_on_sudden_death_player_died):
+		EventBus.player_died.disconnect(_on_sudden_death_player_died)
+	
+	# Clear respawn blocks
+	if respawn_manager:
+		respawn_manager.clear_all_respawn_blocks() 

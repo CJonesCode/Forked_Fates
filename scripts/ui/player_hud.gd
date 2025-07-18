@@ -302,12 +302,9 @@ func _flash_panel(player_id: int, flash_color: Color) -> void:
 	var panel = player_panels[player_id]
 	var tween = create_tween()
 	
-	# Flash effect
-	tween.tween_method(_set_panel_modulate.bind(panel), Color.WHITE, flash_color, 0.1)
-	tween.tween_method(_set_panel_modulate.bind(panel), flash_color, Color.WHITE, 0.1)
-
-func _set_panel_modulate(panel: Control, color: Color) -> void:
-	panel.modulate = color
+	# Flash effect using tween_property (correct approach)
+	tween.tween_property(panel, "modulate", flash_color, 0.1)
+	tween.tween_property(panel, "modulate", Color.WHITE, 0.1)
 
 # Signal handlers
 func _on_player_health_changed(player_id: int, new_health: int, max_health: int) -> void:

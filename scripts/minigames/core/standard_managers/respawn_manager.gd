@@ -68,10 +68,19 @@ func _process(delta: float) -> void:
 
 ## Handle player death event
 func _on_player_died(player_id: int) -> void:
+	Logger.system("RespawnManager received player_died signal for Player " + str(player_id), "RespawnManager")
+	
 	if not is_tracking:
+		Logger.warning("RespawnManager not tracking - ignoring death event", "RespawnManager")
 		return
 	
-	# Check respawn limits
+	# Check if this player is blocked from respawning (set by minigame)
+	if _is_player_blocked_from_respawn(player_id):
+		Logger.game_flow("Player " + str(player_id) + " is blocked from respawning by minigame rules", "RespawnManager")
+		max_respawns_reached.emit(player_id)
+		return
+	
+	# Check respawn limits (for minigames that use traditional respawn counting)
 	var respawn_count: int = player_respawn_counts.get(player_id, 0)
 	if max_respawns >= 0 and respawn_count >= max_respawns:
 		Logger.game_flow("Player " + str(player_id) + " has reached max respawns", "RespawnManager")
@@ -80,15 +89,21 @@ func _on_player_died(player_id: int) -> void:
 	
 	# Start respawn process
 	Logger.game_flow("Starting respawn process for Player " + str(player_id) + " in " + str(respawn_delay) + " seconds", "RespawnManager")
+	Logger.system("Available respawn points: " + str(respawn_points.size()), "RespawnManager")
 	dead_players[player_id] = respawn_delay
 	
 	# Make player invisible during respawn countdown
 	var player: BasePlayer = _get_player_by_id(player_id)
 	if player:
 		player.visible = false
+		Logger.system("Player " + str(player_id) + " found and made invisible for respawn countdown", "RespawnManager")
+	else:
+		Logger.warning("Player " + str(player_id) + " not found for respawn countdown!", "RespawnManager")
 
 ## Respawn a specific player
 func _respawn_player(player_id: int) -> void:
+	Logger.system("Attempting to respawn Player " + str(player_id), "RespawnManager")
+	
 	var player: BasePlayer = _get_player_by_id(player_id)
 	if not player:
 		Logger.warning("Cannot respawn - player " + str(player_id) + " not found", "RespawnManager")
@@ -102,16 +117,19 @@ func _respawn_player(player_id: int) -> void:
 	
 	# Choose respawn position
 	var respawn_position: Vector2 = _choose_respawn_position(player_id)
+	Logger.system("Respawning Player " + str(player_id) + " at position " + str(respawn_position), "RespawnManager")
 	
 	# Update player data
 	var player_data: PlayerData = GameManager.get_player_data(player_id)
 	if player_data:
 		player_data.current_health = player_data.max_health
 		player_data.is_alive = true
+		Logger.system("Updated GameManager player data for Player " + str(player_id), "RespawnManager")
 	
 	# Set spawn position and respawn
 	player.set_spawn_position(respawn_position)
 	player.respawn()
+	Logger.system("Called player.respawn() for Player " + str(player_id), "RespawnManager")
 	
 	# Apply temporary invincibility if configured
 	if respawn_invincibility_time > 0:
@@ -152,13 +170,27 @@ func _blink_player(alpha: float) -> void:
 
 ## Get player instance by ID
 func _get_player_by_id(player_id: int) -> BasePlayer:
-	# This would need to access the player spawner or game state
-	# For now, search through the scene tree
-	var players: Array[Node] = []
-	players.assign(get_tree().get_nodes_in_group("players"))
-	for node in players:
-		if node is BasePlayer and node.player_data.player_id == player_id:
-			return node
+	# Look for player spawner in parent (PhysicsMinigame)
+	var parent_minigame = get_parent()
+	if parent_minigame and parent_minigame.has_method("get") and parent_minigame.get("player_spawner"):
+		var player_spawner = parent_minigame.player_spawner
+		if player_spawner and player_spawner.has_method("get_player"):
+			return player_spawner.get_player(player_id)
+	
+	# Fallback: search through scene tree for BasePlayer nodes
+	var scene_root = get_tree().current_scene
+	return _find_player_recursive(scene_root, player_id)
+
+## Recursively search for player by ID
+func _find_player_recursive(node: Node, player_id: int) -> BasePlayer:
+	if node is BasePlayer and node.player_data and node.player_data.player_id == player_id:
+		return node
+	
+	for child in node.get_children():
+		var result = _find_player_recursive(child, player_id)
+		if result:
+			return result
+	
 	return null
 
 ## Force respawn a player immediately
@@ -187,4 +219,27 @@ func get_respawn_time_remaining(player_id: int) -> float:
 ## Clear all respawn timers (for game end)
 func clear_all_respawn_timers() -> void:
 	dead_players.clear()
-	Logger.system("Cleared all respawn timers", "RespawnManager") 
+	Logger.system("Cleared all respawn timers", "RespawnManager")
+
+# Minigame-controlled respawn blocking
+var blocked_players: Array[int] = []
+
+## Block a player from respawning (called by minigames)
+func block_player_respawn(player_id: int) -> void:
+	if not player_id in blocked_players:
+		blocked_players.append(player_id)
+		Logger.system("Player " + str(player_id) + " blocked from respawning", "RespawnManager")
+
+## Allow a player to respawn again (called by minigames)  
+func unblock_player_respawn(player_id: int) -> void:
+	blocked_players.erase(player_id)
+	Logger.system("Player " + str(player_id) + " unblocked for respawning", "RespawnManager")
+
+## Check if player is blocked from respawning
+func _is_player_blocked_from_respawn(player_id: int) -> bool:
+	return player_id in blocked_players
+
+## Clear all respawn blocks (for game end)
+func clear_all_respawn_blocks() -> void:
+	blocked_players.clear()
+	Logger.system("Cleared all respawn blocks", "RespawnManager") 
