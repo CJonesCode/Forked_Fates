@@ -12,30 +12,34 @@ func _ready() -> void:
 	super()
 	
 	minigame_name = "Sudden Death"
-	minigame_description = "3-life elimination combat with ragdoll physics"
+	minigame_description = "3-life elimination combat with ragdoll physics and projectile weapons"
 	min_players = 2
 	max_players = 4
 	estimated_duration = 180.0
-	tags = ["combat", "elimination", "physics"]
+	tags = ["combat", "elimination", "physics", "weapons"]
 	
+	# Throwing-centric tutorial content
 	tutorial_rules = [
 		"Each player starts with 3 lives (3 deaths allowed)",
 		"Lose a life each time your health reaches 0",
 		"Players respawn after 3 seconds if they have lives remaining",
-		"Items spawn around the arena - collect them for advantages",
+		"Weapons spawn around the arena - grab them quickly!",
 		"Last player standing wins!"
 	]
-	tutorial_objective = "Be the last player alive!"
+	tutorial_objective = "Be the last player alive in projectile-based combat!"
 	tutorial_tips = [
-		"Collect weapons like pistols and bats",
-		"Use ragdoll physics to avoid attacks",
-		"Control territory around item spawn points"
+		"FIRE weapons to attack enemies at range",
+		"THROW weapons as projectiles for surprise attacks",
+		"PICK UP weapons dropped by defeated players",
+		"Thrown weapons deal damage on impact!",
+		"Use ragdoll physics to dodge incoming attacks",
+		"Control territory around weapon spawn points"
 	]
 	tutorial_duration = 7.0
 	
 	# Don't auto-initialize in _ready() - wait for explicit initialization
 	# The GameManager will call initialize_minigame() and start_minigame() when appropriate
-	Logger.system("SuddenDeathMinigame ready - waiting for explicit initialization", "SuddenDeathMinigame")
+	Logger.system("SuddenDeathMinigame ready with projectile weapon system - waiting for explicit initialization", "SuddenDeathMinigame")
 
 ## Initialize minigame context from GameManager (fallback for direct scene loading)
 ## DEPRECATED: This method should not be called automatically in _ready()
@@ -86,6 +90,8 @@ func _on_physics_initialize() -> void:
 	for player_data in GameManager.players.values():
 		player_data_array.append(player_data)
 	UIManager.show_game_hud(player_data_array)
+	
+	Logger.system("SuddenDeathMinigame initialized with projectile weapon system", "SuddenDeathMinigame")
 
 ## Override tutorial process to add debug logging
 func _process(delta: float) -> void:
@@ -118,6 +124,13 @@ func _on_physics_start() -> void:
 	_update_game_timer_display()
 	EventBus.round_started.emit()
 
+## Projectile weapon system integration
+func _on_physics_weapon_spawned(weapon: BaseWeapon) -> void:
+	Logger.combat("Projectile weapon spawned: " + weapon.weapon_name + " in Sudden Death arena", "SuddenDeathMinigame")
+	
+	# Could add weapon-specific effects here
+	# e.g., highlight powerful weapons, add spawn effects, etc.
+
 func _update_game_timer_display() -> void:
 	if game_timer_label:
 		var minutes: int = int(game_timer) / 60
@@ -135,6 +148,10 @@ func _on_back_button_pressed() -> void:
 func _on_physics_victory(winner_data: Dictionary, result: MinigameResult) -> void:
 	result.statistics["game_duration"] = game_timer
 	
+	# Add projectile weapon statistics
+	if item_spawner:
+		result.statistics["weapons_spawned"] = item_spawner.get_spawn_statistics().get("total_weapons", 0)
+	
 	if winner_data.has("winner_id"):
 		var winner_data_obj: PlayerData = context.get_player_data(winner_data.winner_id)
 		if winner_data_obj:
@@ -143,7 +160,8 @@ func _on_physics_victory(winner_data: Dictionary, result: MinigameResult) -> voi
 	EventBus.minigame_ended.emit(result.winners[0] if not result.winners.is_empty() else -1, {
 		"minigame_type": "sudden_death",
 		"duration": game_timer,
-		"winner_name": result.statistics.get("winner_name", "No One")
+		"winner_name": result.statistics.get("winner_name", "No One"),
+		"weapons_used": result.statistics.get("weapons_spawned", 0)
 	})
 
 ## Handle player death for Sudden Death specific rules (3 lives elimination)
@@ -197,4 +215,6 @@ func _on_physics_end(result: MinigameResult) -> void:
 	
 	# Clear respawn blocks
 	if respawn_manager:
-		respawn_manager.clear_all_respawn_blocks() 
+		respawn_manager.clear_all_respawn_blocks()
+	
+	Logger.system("SuddenDeathMinigame cleanup completed with projectile weapon system", "SuddenDeathMinigame") 

@@ -3,12 +3,14 @@ extends BaseComponent
 
 ## Input processing and mapping component
 ## Handles input configuration and translates input to game actions
+## Pure throwing-centric weapon controls
 
-# Input signals
+# Input signals - throwing-centric style
 signal movement_input_changed(movement: Vector2)
 signal jump_input_pressed()
-signal use_input_pressed()
-signal drop_input_pressed()
+signal fire_input_pressed()       # Fire held weapon
+signal throw_input_pressed()      # Throw held weapon as projectile
+signal pickup_input_pressed()     # Pick up nearby weapon
 
 # Input configuration
 @export var player_id: int = 0
@@ -49,14 +51,12 @@ func _gather_input() -> void:
 	# Reset movement vector
 	var new_movement: Vector2 = Vector2.ZERO
 	
-	# Cache input states for performance (with safety checks)
-	_move_left_pressed = InputMap.has_action(input_config.move_left_action) and Input.is_action_pressed(input_config.move_left_action)
-	_move_right_pressed = InputMap.has_action(input_config.move_right_action) and Input.is_action_pressed(input_config.move_right_action)
-	
-	# Gather movement input
-	if _move_left_pressed:
+	# Check left movement
+	if InputMap.has_action(input_config.move_left_action) and Input.is_action_pressed(input_config.move_left_action):
 		new_movement.x -= 1.0
-	if _move_right_pressed:
+	
+	# Check right movement
+	if InputMap.has_action(input_config.move_right_action) and Input.is_action_pressed(input_config.move_right_action):
 		new_movement.x += 1.0
 	
 	# Normalize input vector
@@ -68,19 +68,23 @@ func _gather_input() -> void:
 		current_movement = new_movement
 		movement_input_changed.emit(current_movement)
 
-## Process button press actions
+## Process button press actions - throwing-centric style
 func _process_input_actions() -> void:
 	# Handle jump input
 	if InputMap.has_action(input_config.jump_action) and Input.is_action_just_pressed(input_config.jump_action):
 		jump_input_pressed.emit()
 	
-	# Handle use input
-	if InputMap.has_action(input_config.use_action) and Input.is_action_just_pressed(input_config.use_action):
-		use_input_pressed.emit()
+	# Handle fire input (primary action - fire held weapon)
+	if InputMap.has_action(input_config.fire_action) and Input.is_action_just_pressed(input_config.fire_action):
+		fire_input_pressed.emit()
 	
-	# Handle drop input
-	if InputMap.has_action(input_config.drop_action) and Input.is_action_just_pressed(input_config.drop_action):
-		drop_input_pressed.emit()
+	# Handle throw input (projectile action - throw weapon)
+	if InputMap.has_action(input_config.throw_action) and Input.is_action_just_pressed(input_config.throw_action):
+		throw_input_pressed.emit()
+	
+	# Handle pickup input (acquisition action - pick up weapon)
+	if InputMap.has_action(input_config.pickup_action) and Input.is_action_just_pressed(input_config.pickup_action):
+		pickup_input_pressed.emit()
 
 ## Setup input configuration for specific player
 func setup_for_player(p_id: int, config: InputConfig = null) -> void:
@@ -94,7 +98,8 @@ func setup_for_player(p_id: int, config: InputConfig = null) -> void:
 	_validate_input_config()
 	
 	Logger.system("Player " + str(player_id) + " input configured with " + input_config.get_device_name(), "InputComponent")
-	Logger.debug("Actions: " + input_config.move_left_action + ", " + input_config.move_right_action + ", " + input_config.jump_action + ", " + input_config.use_action + ", " + input_config.drop_action, "InputComponent")
+	Logger.debug("Weapon Actions: fire=" + input_config.fire_action + ", throw=" + input_config.throw_action + ", pickup=" + input_config.pickup_action, "InputComponent")
+	Logger.debug("Movement Actions: left=" + input_config.move_left_action + ", right=" + input_config.move_right_action + ", jump=" + input_config.jump_action, "InputComponent")
 
 ## Setup default input configuration based on player ID
 func _setup_default_input_config() -> void:
@@ -115,70 +120,58 @@ func _validate_input_config() -> void:
 	
 	var missing_actions: Array[String] = []
 	
-	# Check required actions
+	# Check required movement actions
 	if not InputMap.has_action(input_config.move_left_action):
 		missing_actions.append(input_config.move_left_action)
 	if not InputMap.has_action(input_config.move_right_action):
 		missing_actions.append(input_config.move_right_action)
 	if not InputMap.has_action(input_config.jump_action):
 		missing_actions.append(input_config.jump_action)
-	if not InputMap.has_action(input_config.use_action):
-		missing_actions.append(input_config.use_action)
-	if not InputMap.has_action(input_config.drop_action):
-		missing_actions.append(input_config.drop_action)
 	
-	# Report missing actions
+	# Check projectile weapon actions
+	if not InputMap.has_action(input_config.fire_action):
+		missing_actions.append(input_config.fire_action)
+	if not InputMap.has_action(input_config.throw_action):
+		missing_actions.append(input_config.throw_action)
+	if not InputMap.has_action(input_config.pickup_action):
+		missing_actions.append(input_config.pickup_action)
+	
+	# If missing critical actions, log warnings
 	if missing_actions.size() > 0:
-		Logger.warning("Player " + str(player_id) + " missing input actions: " + str(missing_actions), "InputComponent")
-		Logger.warning("These inputs will not work until added to Input Map", "InputComponent")
+		Logger.warning("Missing input actions for player " + str(player_id) + ": " + str(missing_actions), "InputComponent")
 	else:
-		Logger.debug("Player " + str(player_id) + " all input actions found", "InputComponent")
+		Logger.debug("All weapon input actions validated for player " + str(player_id), "InputComponent")
 
-## Enable or disable input processing
+## Enable/disable input processing
 func set_input_enabled(enabled: bool) -> void:
 	input_enabled = enabled
 	if not enabled:
-		# Clear current movement when disabled
 		current_movement = Vector2.ZERO
 		movement_input_changed.emit(current_movement)
 
-## Check if input is currently enabled
-func is_input_enabled() -> bool:
-	return input_enabled
-
-## Get current movement input
-func get_movement_input() -> Vector2:
-	return current_movement
-
-## Check if a specific action is currently pressed
+## Check if specific action is pressed
 func is_action_pressed(action_name: String) -> bool:
 	if not input_enabled or not InputMap.has_action(action_name):
 		return false
 	return Input.is_action_pressed(action_name)
 
-## Check if a specific action was just pressed
+## Check if specific action was just pressed
 func is_action_just_pressed(action_name: String) -> bool:
 	if not input_enabled or not InputMap.has_action(action_name):
 		return false
 	return Input.is_action_just_pressed(action_name)
 
-## Get input strength for analog inputs (0.0 to 1.0)
-func get_action_strength(action_name: String) -> float:
+## Check if specific action was just released
+func is_action_just_released(action_name: String) -> bool:
 	if not input_enabled or not InputMap.has_action(action_name):
-		return 0.0
-	return Input.get_action_strength(action_name)
+		return false
+	return Input.is_action_just_released(action_name)
 
-## Override input programmatically (for AI or testing)
-func set_virtual_input(movement: Vector2, jump: bool = false, use: bool = false, drop: bool = false) -> void:
-	# Emit movement change
-	if movement != current_movement:
-		current_movement = movement
-		movement_input_changed.emit(current_movement)
-	
-	# Emit action signals
-	if jump:
-		jump_input_pressed.emit()
-	if use:
-		use_input_pressed.emit()
-	if drop:
-		drop_input_pressed.emit() 
+## Get current input state summary
+func get_input_state() -> Dictionary:
+	return {
+		"movement": current_movement,
+		"input_enabled": input_enabled,
+		"player_id": player_id,
+		"device": input_config.get_device_name() if input_config else "None"
+	} 

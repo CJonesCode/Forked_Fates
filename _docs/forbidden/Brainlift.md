@@ -175,3 +175,5 @@ We can use a capsule to kind of force physics angles on ragdoll, but maybe also 
 Steamworks has no way to support direct connections by IP, always uses a steamworks id and none of the steam emulators work on macOS...
 
 Adding a discrete testing requirement to [agent_context_guide.md](../agent_context_guide.md) has proven very effective, though the file is getting way too large so I'll have to try the folder/relevantname.md idea.
+
+We should refactor the items to a more generic class to handle pickups (active and inactive) and not just weapons. This may also be a cheesey way to implement the passives (passive pickups like speed boosts will need a buff element, so we can make the duration -1 and persistent)

@@ -2,7 +2,8 @@ class_name BasePlayer
 extends CharacterBody2D
 
 ## Base player class using component architecture
-## Acts as coordinator for player components: movement, health, inventory, input, ragdoll
+## Acts as coordinator for player components: movement, health, weapon, input, ragdoll
+## Pure projectile-based weapon system
 
 # Player states
 enum PlayerState {
@@ -15,10 +16,10 @@ enum PlayerState {
 # Configuration reference
 var game_config: GameConfig
 
-# Core components with strict typing
+# Core components with strict typing - projectile weapon system
 @onready var movement: MovementComponent = $MovementComponent
 @onready var health: HealthComponent = $HealthComponent
-@onready var inventory: InventoryComponent = $InventoryComponent
+@onready var weapon = $WeaponComponent  # WeaponComponent - avoid circular dependency
 @onready var input: InputComponent = $InputComponent
 @onready var ragdoll: RagdollComponent = $RagdollComponent
 
@@ -57,7 +58,7 @@ func _ready() -> void:
 	_setup_components()
 	_connect_component_signals()
 	
-	Logger.system("BasePlayer initialized: " + player_data.player_name, "BasePlayer")
+	Logger.system("BasePlayer initialized: " + player_data.player_name + " with projectile weapon system", "BasePlayer")
 
 func _physics_process(_delta: float) -> void:
 	# Components handle their own physics processing
@@ -85,7 +86,7 @@ func _setup_components() -> void:
 	if input and player_data:
 		input.setup_for_player(player_data.player_id)
 
-## Connect component signals for communication
+## Connect component signals for communication - throwing-centric style
 func _connect_component_signals() -> void:
 	# Health component signals
 	if health:
@@ -99,18 +100,22 @@ func _connect_component_signals() -> void:
 		movement.landed.connect(_on_movement_landed)
 		movement.jumped.connect(_on_movement_jumped)
 	
-	# Inventory component signals
-	if inventory:
-		inventory.item_picked_up.connect(_on_item_picked_up)
-		inventory.item_dropped.connect(_on_item_dropped)
-		inventory.item_used.connect(_on_item_used)
+	# Projectile weapon component signals
+	if weapon:
+		weapon.weapon_picked_up.connect(_on_weapon_picked_up)
+		weapon.weapon_thrown.connect(_on_weapon_thrown)
+		weapon.weapon_fired.connect(_on_weapon_fired)
+		weapon.nearby_weapons_changed.connect(_on_nearby_weapons_changed)
+		Logger.system("Connected projectile weapon signals for " + player_data.player_name, "BasePlayer")
 	
-	# Input component signals
+	# Throwing-centric input component signals
 	if input:
 		input.movement_input_changed.connect(_on_input_movement_changed)
 		input.jump_input_pressed.connect(_on_input_jump_pressed)
-		input.use_input_pressed.connect(_on_input_use_pressed)
-		input.drop_input_pressed.connect(_on_input_drop_pressed)
+		input.fire_input_pressed.connect(_on_input_fire_pressed)
+		input.throw_input_pressed.connect(_on_input_throw_pressed)
+		input.pickup_input_pressed.connect(_on_input_pickup_pressed)
+		Logger.system("Connected throwing-centric input signals for " + player_data.player_name, "BasePlayer")
 	
 	# Ragdoll component signals
 	if ragdoll:
@@ -145,8 +150,8 @@ func _handle_state_transition(old_state: PlayerState, new_state: PlayerState) ->
 func _enter_alive_state() -> void:
 	if input:
 		input.set_input_enabled(true)
-	if inventory:
-		inventory.set_pickup_enabled(true)
+	if weapon:
+		weapon.set_pickup_enabled(true)
 
 ## Enter ragdoll state
 func _enter_ragdoll_state() -> void:
@@ -159,15 +164,15 @@ func _enter_dead_state() -> void:
 		ragdoll.enter_death_ragdoll()
 	if input:
 		input.set_input_enabled(false)
-	if inventory:
-		inventory.set_pickup_enabled(false)
+	if weapon:
+		weapon.set_pickup_enabled(false)
 
 ## Enter spectating state
 func _enter_spectating_state() -> void:
 	if input:
 		input.set_input_enabled(false)
-	if inventory:
-		inventory.set_pickup_enabled(false)
+	if weapon:
+		weapon.set_pickup_enabled(false)
 
 ## Set health (called by minigame systems)
 func set_health(new_health: int) -> void:
@@ -223,44 +228,53 @@ func set_spawn_position(spawn_pos: Vector2) -> void:
 	spawn_position = spawn_pos
 	Logger.system("Set spawn position for " + player_data.player_name + " to " + str(spawn_position), "BasePlayer")
 
-## Get component by type (utility method)
+## Get component by type (utility method) - projectile weapons only
 func get_component(component_type) -> BaseComponent:
 	match component_type:
 		MovementComponent:
 			return movement
 		HealthComponent:
 			return health
-		InventoryComponent:
-			return inventory
 		InputComponent:
 			return input
 		RagdollComponent:
 			return ragdoll
 		_:
+			# Handle WeaponComponent case without typed reference
+			if str(component_type).ends_with("WeaponComponent"):
+				return weapon
 			Logger.warning("Unknown component type requested: " + str(component_type), "BasePlayer")
 			return null
 
-## Legacy compatibility methods (REMOVED - use components directly)
-func set_input(movement_input: Vector2, jump: bool, use: bool) -> void:
-	Logger.warning("DEPRECATED: set_input called - use InputComponent directly", "BasePlayer")
-	if movement:
-		movement.set_input(movement_input, jump)
+## Projectile weapon system methods
 
-func try_pickup_nearest_item() -> bool:
-	if inventory:
-		return inventory.try_pickup_nearest_item()
+## Fire currently held weapon
+func fire_weapon() -> bool:
+	if weapon:
+		return weapon.fire_held_weapon()
 	return false
 
-func drop_item() -> void:
-	if inventory:
-		inventory.drop_item()
-
-func use_held_item() -> bool:
-	if inventory:
-		return inventory.use_held_item()
+## Throw currently held weapon as projectile
+func throw_weapon(force: float = 0.0) -> bool:
+	if weapon:
+		return weapon.throw_held_weapon(force)
 	return false
+
+## Pick up nearest weapon
+func pickup_weapon() -> bool:
+	if weapon:
+		return weapon.pickup_nearest_weapon()
+	return false
+
+## Get currently held weapon
+func get_held_weapon() -> BaseWeapon:
+	if weapon:
+		return weapon.get_held_weapon()
+	return null
 
 # Component signal handlers
+
+## Health component signal handlers
 func _on_health_changed(new_health: int, max_health: int) -> void:
 	# Update player data
 	if player_data:
@@ -277,12 +291,13 @@ func _on_health_respawned() -> void:
 	if current_state == PlayerState.DEAD:
 		current_state = PlayerState.ALIVE
 
+## Movement component signal handlers
 func _on_facing_changed(new_direction: int) -> void:
-	# Update held item position when facing changes
-	if inventory and inventory.get_held_item():
-		var item: BaseItem = inventory.get_held_item()
-		if item.has_method("_update_held_position"):
-			item._update_held_position()
+	# Update held weapon position when facing changes
+	if weapon and weapon.get_held_weapon():
+		var held_weapon: BaseWeapon = weapon.get_held_weapon()
+		if held_weapon.has_method("_update_held_position"):
+			held_weapon._update_held_position()
 
 func _on_movement_landed() -> void:
 	Logger.debug(player_data.player_name + " landed", "BasePlayer")
@@ -290,15 +305,20 @@ func _on_movement_landed() -> void:
 func _on_movement_jumped() -> void:
 	Logger.debug(player_data.player_name + " jumped", "BasePlayer")
 
-func _on_item_picked_up(item: BaseItem) -> void:
-	Logger.pickup(player_data.player_name + " picked up " + item.item_name, "BasePlayer")
+## Projectile weapon component signal handlers
+func _on_weapon_picked_up(weapon_obj: BaseWeapon) -> void:
+	Logger.pickup(player_data.player_name + " picked up " + weapon_obj.weapon_name, "BasePlayer")
 
-func _on_item_dropped(item: BaseItem) -> void:
-	Logger.item(item.item_name, "dropped by " + player_data.player_name, "BasePlayer")
+func _on_weapon_thrown(weapon_obj: BaseWeapon, throw_velocity: Vector2) -> void:
+	Logger.combat(weapon_obj.weapon_name + " thrown by " + player_data.player_name, "BasePlayer")
 
-func _on_item_used(item: BaseItem) -> void:
-	Logger.item(item.item_name, "used by " + player_data.player_name, "BasePlayer")
+func _on_weapon_fired(weapon_obj: BaseWeapon) -> void:
+	Logger.combat(weapon_obj.weapon_name + " fired by " + player_data.player_name, "BasePlayer")
 
+func _on_nearby_weapons_changed(nearby_weapons: Array[BaseWeapon]) -> void:
+	Logger.debug(player_data.player_name + " nearby weapons: " + str(nearby_weapons.size()), "BasePlayer")
+
+## Throwing-centric input signal handlers
 func _on_input_movement_changed(movement_input: Vector2) -> void:
 	if movement and current_state == PlayerState.ALIVE:
 		movement.set_input(movement_input, false)  # Jump handled separately
@@ -307,19 +327,25 @@ func _on_input_jump_pressed() -> void:
 	if movement and current_state == PlayerState.ALIVE:
 		movement.set_input(movement.input_vector, true)
 
-func _on_input_use_pressed() -> void:
+func _on_input_fire_pressed() -> void:
 	if current_state != PlayerState.ALIVE:
 		return
-		
-	# Try to use held item first
-	if not use_held_item():
-		# If no item or item couldn't be used, try to pick up nearest item
-		try_pickup_nearest_item()
+	
+	# Projectile system: Fire held weapon, or pick up weapon if unarmed
+	if not fire_weapon():
+		pickup_weapon()
 
-func _on_input_drop_pressed() -> void:
+func _on_input_throw_pressed() -> void:
 	if current_state == PlayerState.ALIVE:
-		drop_item()
+		# Projectile system: Throw held weapon as projectile
+		throw_weapon()
 
+func _on_input_pickup_pressed() -> void:
+	if current_state == PlayerState.ALIVE:
+		# Projectile system: Pick up nearby weapon
+		pickup_weapon()
+
+## Ragdoll component signal handlers
 func _on_ragdoll_entered() -> void:
 	current_state = PlayerState.RAGDOLLED
 	EventBus.player_ragdolled.emit(player_data.player_id)

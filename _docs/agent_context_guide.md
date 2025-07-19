@@ -5,7 +5,7 @@
 ## Project Overview
 
 **Forked Fates** is a multiplayer party game combining:
-- Duck Game-style ragdoll physics for chaotic combat
+- Ragdoll physics for chaotic combat
 - Slay the Spire-style map progression for structured gameplay
 - Mario Party-style minigames for varied experiences
 

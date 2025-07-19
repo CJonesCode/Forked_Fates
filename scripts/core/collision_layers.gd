@@ -91,6 +91,21 @@ static func setup_item(item: RigidBody2D) -> void:
 	set_layer(item, Layer.ITEMS)
 	set_mask(item, Mask.ITEMS_INTERACTION)
 
+## Setup weapon collision (pure projectile system)
+static func setup_weapon(weapon: RigidBody2D) -> void:
+	set_layer(weapon, Layer.ITEMS)
+	set_mask(weapon, Mask.ITEMS_INTERACTION)
+
+## Setup thrown weapon collision (projectile mode)
+static func setup_thrown_weapon(weapon: RigidBody2D) -> void:
+	set_layer(weapon, Layer.PROJECTILES)
+	set_mask(weapon, Mask.PROJECTILE_TARGETS)
+
+## Setup bullet collision
+static func setup_bullet(bullet: RigidBody2D) -> void:
+	set_layer(bullet, Layer.PROJECTILES)
+	set_mask(bullet, Mask.PROJECTILE_TARGETS)
+
 ## Setup projectile collision
 static func setup_projectile(projectile: RigidBody2D) -> void:
 	set_layer(projectile, Layer.PROJECTILES)
@@ -103,6 +118,11 @@ static func setup_pickup_area(area: Area2D) -> void:
 
 ## Setup attack area (Area2D for weapon attacks)
 static func setup_attack_area(area: Area2D) -> void:
+	set_layer(area, Layer.NONE)
+	set_mask(area, Mask.PLAYER_DETECTION)
+
+## Setup melee attack area (Area2D for melee weapon swings)
+static func setup_melee_attack(area: Area2D) -> void:
 	set_layer(area, Layer.NONE)
 	set_mask(area, Mask.PLAYER_DETECTION)
 
