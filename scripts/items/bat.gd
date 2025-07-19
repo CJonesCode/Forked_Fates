@@ -31,6 +31,14 @@ func _ready() -> void:
 	# Setup attack area
 	if attack_area:
 		CollisionLayers.setup_attack_area(attack_area)
+		
+		# Debug: Check attack area collision shape
+		var attack_collision_shape = attack_area.get_node_or_null("CollisionShape2D")
+		if attack_collision_shape and attack_collision_shape.shape:
+			Logger.debug("Attack area has collision shape: " + str(attack_collision_shape.shape.get_class()), "Bat")
+		else:
+			Logger.warning("Attack area missing collision shape!", "Bat")
+		
 		# Check before connecting to prevent duplicate connections (standards compliance)
 		if not attack_area.body_entered.is_connected(_on_attack_area_entered):
 			attack_area.body_entered.connect(_on_attack_area_entered)
@@ -39,6 +47,8 @@ func _ready() -> void:
 		
 		# Disable attack area initially
 		attack_area.monitoring = false
+	else:
+		Logger.error("Bat attack area not found in scene!", "Bat")
 	
 	Logger.item(item_name, "initialized", "Bat")
 
@@ -113,7 +123,10 @@ func _end_swing_animation() -> void:
 
 ## Handle target entering attack range
 func _on_attack_area_entered(body: Node2D) -> void:
+	Logger.debug("Attack area entered by: " + str(body.name) + " (" + str(body.get_class()) + ")", "Bat")
+	
 	if not is_swinging or not holder:
+		Logger.debug("Not swinging or no holder - ignoring collision", "Bat")
 		return
 	
 	# Check if it's a valid target
@@ -122,6 +135,7 @@ func _on_attack_area_entered(body: Node2D) -> void:
 		
 		# Don't hit dead players or targets already hit this swing
 		if target_player.current_state == BasePlayer.PlayerState.DEAD or target_player in swing_targets:
+			Logger.debug("Target already dead or already hit this swing", "Bat")
 			return
 		
 		# Add to hit targets
@@ -137,6 +151,8 @@ func _on_attack_area_entered(body: Node2D) -> void:
 		
 		var target_player_name: String = target_player.player_data.player_name if target_player.player_data else "Unknown Player"
 		Logger.combat("Bat reported " + str(damage) + " damage from Player " + str(attacker_id) + " to " + target_player_name, "Bat")
+	else:
+		Logger.debug("Body is not a valid target: " + str(body.get_class()) + " (is BasePlayer: " + str(body is BasePlayer) + ")", "Bat")
 
 ## Handle target leaving attack range
 func _on_attack_area_exited(body: Node2D) -> void:

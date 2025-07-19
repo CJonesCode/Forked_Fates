@@ -84,6 +84,9 @@ func _create_standard_manager(manager_type: String) -> Node:
 		"respawn_manager":
 			var script = load("res://scripts/minigames/core/standard_managers/respawn_manager.gd")
 			return script.new()
+		"crown_manager":
+			var script = load("res://scripts/minigames/core/standard_managers/crown_manager.gd")
+			return script.new()
 		_:
 			Logger.warning("Unknown standard manager type: " + manager_type, "MinigameContext")
 			return null

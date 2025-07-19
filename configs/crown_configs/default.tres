@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CrownConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://configs/crown_configs/crown_config.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+crown_text = "👑"
+crown_color = Color(1, 0.843137, 0, 1)
+font_size = 24
+float_height = -50.0
+bob_enabled = true
+bob_amplitude = 5.0
+bob_speed = 2.0
+elimination_text = "👑"
+elimination_color = Color(1, 0.843137, 0, 1)
+score_based_text = "🏆"
+score_based_color = Color(1, 0.647059, 0, 1)
+time_based_text = "⏰"
+time_based_color = Color(0, 1, 1, 1)
+custom_text = "⭐"
+custom_color = Color(0.501961, 0, 0.501961, 1)
+update_frequency = 0.5
+victory_tie_breaker = "player_id" 

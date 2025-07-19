@@ -67,11 +67,21 @@ func _on_initialize(minigame_context: MinigameContext) -> void:
 	# Setup standard managers
 	_setup_standard_managers()
 	
+	# Now that managers are set up, reconfigure crown manager with proper references
+	_reconfigure_crown_manager()
+	
 	# Setup physics environment
 	_setup_arena()
 	
 	# Hook for subclass initialization
 	_on_physics_initialize()
+
+## Reconfigure crown manager with physics-specific managers (after they're created)
+func _reconfigure_crown_manager() -> void:
+	if crown_manager:
+		# Now that victory_condition_manager and player_spawner are set up, configure crown manager properly
+		crown_manager.setup_for_minigame(victory_condition_manager, player_spawner)
+		Logger.debug("Crown manager reconfigured with physics managers", "PhysicsMinigame")
 
 ## Setup standard managers for physics minigames
 func _setup_standard_managers() -> void:
@@ -193,14 +203,15 @@ func _get_spawn_points() -> Array[Vector2]:
 				points.append(child.global_position)
 	return points
 
-## Get respawn point positions
+## Get respawn points for respawn manager
 func _get_respawn_points() -> Array[Vector2]:
-	var points: Array[Vector2] = []
 	if respawn_points:
+		var points: Array[Vector2] = []
 		for child in respawn_points.get_children():
 			if child is Marker2D:
 				points.append(child.global_position)
-	return points
+		return points
+	return _get_spawn_points()  # Fallback to spawn points
 
 ## Get item spawn point positions
 func _get_item_spawn_points() -> Array[Vector2]:
@@ -297,6 +308,13 @@ func _on_damage_reported(victim_id: int, attacker_id: int, damage: int, source_n
 			attacker_name = attacker_player.player_data.player_name
 	
 	Logger.combat("Applied " + str(damage) + " damage from " + attacker_name + " to " + victim_name + " via " + source_name, "PhysicsMinigame")
+
+## Configure crown manager with physics-specific managers
+func _configure_crown_manager() -> void:
+	if crown_manager:
+		# Provide victory condition manager and player spawner for full functionality
+		crown_manager.setup_for_minigame(victory_condition_manager, player_spawner)
+		Logger.debug("Crown manager configured with victory and player managers", "PhysicsMinigame")
 
 # Virtual methods for subclasses to implement physics-specific logic
 

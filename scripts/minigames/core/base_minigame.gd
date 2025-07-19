@@ -37,6 +37,10 @@ var is_showing_tutorial: bool = false
 var tutorial_timer: float = 0.0
 var start_time: float = 0.0
 
+# Crown system (available to all minigame types)
+var crown_manager = null  # Will be CrownManager, but loaded dynamically
+@export var use_crown_system: bool = true
+
 func _ready() -> void:
 	Logger.system("BaseMinigame ready: " + minigame_name, "BaseMinigame")
 
@@ -61,6 +65,10 @@ func initialize_minigame(minigame_context: MinigameContext) -> void:
 	
 	# Connect to universal damage reporting system
 	EventBus.player_damage_reported.connect(_on_player_damage_reported)
+	
+	# Setup crown system if enabled
+	if use_crown_system:
+		_setup_crown_system()
 	
 	# Call virtual implementation
 	_on_initialize(minigame_context)
@@ -131,6 +139,12 @@ func end_minigame(result) -> void:
 	
 	# Hide any active game HUD when minigame ends
 	UIManager.hide_game_hud()
+	
+	# Cleanup crown system
+	if crown_manager:
+		crown_manager.remove_crown()
+		crown_manager.queue_free()
+		crown_manager = null
 	
 	# Disconnect universal systems
 	if EventBus.player_damage_reported.is_connected(_on_player_damage_reported):
@@ -264,6 +278,69 @@ func get_tutorial_data() -> Dictionary:
 		"time_remaining": tutorial_timer
 	}
 
+## Setup crown system for any minigame type
+func _setup_crown_system() -> void:
+	if not context:
+		Logger.warning("Cannot setup crown system without context", "BaseMinigame")
+		return
+	
+	# Create crown manager
+	crown_manager = context.get_standard_manager("crown_manager")
+	if crown_manager:
+		add_child(crown_manager)
+		
+		# Connect crown signals
+		crown_manager.crown_awarded.connect(_on_crown_awarded)
+		crown_manager.crown_removed.connect(_on_crown_removed)
+		crown_manager.crown_transferred.connect(_on_crown_transferred)
+		
+		# Setup crown manager with whatever managers are available
+		# Different minigame types have different managers available
+		_configure_crown_manager()
+		
+		Logger.system("Crown system setup completed for: " + minigame_name, "BaseMinigame")
+	else:
+		Logger.warning("Failed to create crown manager", "BaseMinigame")
+
+## Configure crown manager based on available minigame managers
+## Override this in subclasses to provide specific managers
+func _configure_crown_manager() -> void:
+	if crown_manager:
+		# Default configuration - crown manager will use basic setup
+		# Subclasses can override this to provide victory_condition_manager, player_spawner, etc.
+		crown_manager.setup_for_minigame(null, null)
+		Logger.debug("Crown manager configured with basic setup", "BaseMinigame")
+
+## Crown system signal handlers (available to all minigame types)
+
+## Called when crown is awarded to a player
+func _on_crown_awarded(player: BasePlayer) -> void:
+	Logger.game_flow("Crown awarded to: " + player.player_data.player_name + " in " + minigame_name, "BaseMinigame")
+	# Pulse crown for emphasis when first awarded
+	if crown_manager and crown_manager.crown_indicator:
+		crown_manager.crown_indicator.pulse_crown()
+	
+	# Hook for subclass crown handling
+	_on_minigame_crown_awarded(player)
+
+## Called when crown is removed from a player
+func _on_crown_removed(player: BasePlayer) -> void:
+	Logger.game_flow("Crown removed from: " + player.player_data.player_name + " in " + minigame_name, "BaseMinigame")
+	
+	# Hook for subclass crown handling
+	_on_minigame_crown_removed(player)
+
+## Called when crown transfers from one player to another
+func _on_crown_transferred(from_player: BasePlayer, to_player: BasePlayer) -> void:
+	Logger.game_flow("Crown transferred from " + from_player.player_data.player_name + " to " + to_player.player_data.player_name + " in " + minigame_name, "BaseMinigame")
+	
+	# Pulse crown for emphasis on transfer
+	if crown_manager and crown_manager.crown_indicator:
+		crown_manager.crown_indicator.pulse_crown()
+	
+	# Hook for subclass crown transfer handling
+	_on_minigame_crown_transferred(from_player, to_player)
+
 ## Create MinigameInfo from this minigame's metadata (for self-registration)
 func create_registry_info(scene_path: String):
 	var info = MinigameRegistry.MinigameInfo.new(
@@ -330,5 +407,25 @@ func _on_tutorial_shown() -> void:
 ## Called when tutorial finishes
 ## Override this to handle tutorial cleanup
 func _on_tutorial_finished() -> void:
+	# Default implementation does nothing
+	pass
+
+# Crown system virtual methods (available to all minigame types)
+
+## Called when a crown is awarded to a player
+## Override this to handle crown-specific effects in your minigame
+func _on_minigame_crown_awarded(player: BasePlayer) -> void:
+	# Default implementation does nothing
+	pass
+
+## Called when a crown is removed from a player  
+## Override this to handle crown removal effects in your minigame
+func _on_minigame_crown_removed(player: BasePlayer) -> void:
+	# Default implementation does nothing
+	pass
+
+## Called when a crown transfers between players
+## Override this to handle crown transfer effects in your minigame
+func _on_minigame_crown_transferred(from_player: BasePlayer, to_player: BasePlayer) -> void:
 	# Default implementation does nothing
 	pass 

@@ -4,17 +4,20 @@ extends Node
 const PlayerConfigClass = preload("res://configs/player_configs/player_config.gd")
 const ItemConfigClass = preload("res://configs/item_configs/item_config.gd")
 const MinigameConfigClass = preload("res://configs/minigame_configs/minigame_config.gd")
+const CrownConfigClass = preload("res://configs/crown_configs/crown_config.gd")
 
 # Configuration cache
 var player_configs: Dictionary = {}
 var item_configs: Dictionary = {}
 var minigame_configs: Dictionary = {}
+var crown_configs: Dictionary = {}
 var ui_configs: Dictionary = {}
 
 # Configuration directories
 const PLAYER_CONFIG_DIR: String = "res://configs/player_configs/"
 const ITEM_CONFIG_DIR: String = "res://configs/item_configs/"
 const MINIGAME_CONFIG_DIR: String = "res://configs/minigame_configs/"
+const CROWN_CONFIG_DIR: String = "res://configs/crown_configs/"
 const UI_CONFIG_DIR: String = "res://configs/ui_configs/"
 
 # Signals for configuration events
@@ -99,12 +102,37 @@ func invalidate_minigame_config(config_id: String) -> void:
 	if minigame_configs.has(config_id):
 		minigame_configs.erase(config_id)
 
+# Crown configuration management
+func get_crown_config(config_id: String) -> CrownConfig:
+	if crown_configs.has(config_id):
+		return crown_configs[config_id]
+
+	var config_path: String = CROWN_CONFIG_DIR + config_id + ".tres"
+	if not ResourceLoader.exists(config_path):
+		Logger.warning("Crown config not found: " + config_id, "ConfigManager")
+		return null
+	
+	var config: CrownConfig = load(config_path) as CrownConfig
+	if config:
+		crown_configs[config_id] = config
+		config_reloaded.emit("crown", config_id)
+		Logger.info("Crown config loaded: " + config_id, "ConfigManager")
+	else:
+		Logger.error("Failed to load crown config: " + config_id, "ConfigManager")
+	
+	return config
+
+func invalidate_crown_config(config_id: String) -> void:
+	if crown_configs.has(config_id):
+		crown_configs.erase(config_id)
+
 # Network configuration management removed - using Steamworks only
 
 func invalidate_all_configs() -> void:
 	player_configs.clear()
 	item_configs.clear()
 	minigame_configs.clear()
+	crown_configs.clear()
 	ui_configs.clear()
 
 # UI configuration management
@@ -147,6 +175,13 @@ func validate_minigame_config(config_id: String) -> bool:
 	var config: MinigameConfig = get_minigame_config(config_id)
 	if not config or not config.minigame_scene:
 		Logger.error("Invalid minigame config: " + config_id, "ConfigManager")
+		return false
+	return true
+
+func validate_crown_config(config_id: String) -> bool:
+	var config: CrownConfig = get_crown_config(config_id)
+	if not config:
+		Logger.error("Invalid crown config: " + config_id, "ConfigManager")
 		return false
 	return true
 

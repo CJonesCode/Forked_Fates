@@ -170,3 +170,8 @@ Other Gauntlet Fellows are using templates to rapidly prototype, but the hand-ro
 
 Over-saturation of documentation confuses everything, instead I am experimenting with an [agent_context_guide.md](../agent_context_guide.md) to combat this. Perhaps even a agent_context folder that has files split up into smaller relevant chunks to save on context.
 
+We can use a capsule to kind of force physics angles on ragdoll, but maybe also Skeleton2D in the rectangle is good neough.
+
+Steamworks has no way to support direct connections by IP, always uses a steamworks id and none of the steam emulators work on macOS...
+
+Adding a discrete testing requirement to [agent_context_guide.md](../agent_context_guide.md) has proven very effective, though the file is getting way too large so I'll have to try the folder/relevantname.md idea.

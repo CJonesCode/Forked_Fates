@@ -169,6 +169,10 @@ func _on_sudden_death_player_died(player_id: int) -> void:
 	# Update UI
 	EventBus.emit_player_lives_changed(player_id, player_data.current_lives)
 	
+	# Update crown tracking since lives changed
+	if crown_manager:
+		crown_manager.update_crown_tracking()
+	
 	# Check if player is eliminated (out of deaths allowed)
 	if player_data.is_out_of_lives():
 		Logger.game_flow("Sudden Death: " + player_data.player_name + " ELIMINATED - out of lives!", "SuddenDeathMinigame")
@@ -180,6 +184,10 @@ func _on_sudden_death_player_died(player_id: int) -> void:
 		# Eliminate from victory tracking
 		if victory_condition_manager:
 			victory_condition_manager.eliminate_player(player_id)
+		
+		# Update crown tracking since player elimination might change leader
+		if crown_manager:
+			crown_manager.update_crown_tracking()
 
 ## Clean up Sudden Death specific connections
 func _on_physics_end(result: MinigameResult) -> void:
