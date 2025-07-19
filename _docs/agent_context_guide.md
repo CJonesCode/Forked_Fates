@@ -1,6 +1,6 @@
 # Forked Fates - AI Agent Context Guide
 
-**Purpose**: Context reference for AI agents working on this codebase
+**Purpose**: Technical reference for LLMs working on this codebase. Provides concise information on where and how systems are implemented according to project standards. Not marketing copy - technical facts only.
 
 ## Project Overview
 
@@ -9,24 +9,23 @@
 - Slay the Spire-style map progression for structured gameplay
 - Mario Party-style minigames for varied experiences
 
-**Current Status**: The codebase uses modern Godot 4.4 syntax with component-based architecture. All critical bugs have been resolved using architectural solutions. The inheritance hierarchy uses proper class_name patterns with full type safety. Configuration loading system uses proper .tres resource format. Memory management includes proper resource cleanup on shutdown. The weapon system is operational with object pooling, signal management, and UI cleanup. Universal damage system is implemented across all minigame types. Minigame-controlled lives and victory system provides flexibility for different game modes. **UI architecture achieves 100% consistency** using Factory + Manager pattern with no manual UI creation remaining in the codebase. **Steamworks networking is implemented** with lobby creation/joining via GodotSteam GDExtension, completely replacing IP-based networking.
+**Current Status**: Godot 4.4, component-based architecture, circular dependency fix via ID-based architecture with PlayerManager singleton, .tres resource configs, object pooling, universal damage system, minigame-controlled lives/victory, UI Factory+Manager pattern, Steamworks networking via GDExtension.
 
 ## Architecture Summary
 
 ### **Design Philosophy**
-- Component-based architecture for modularity
-- Signal-driven communication for loose coupling  
-- Factory patterns for consistent object creation
-- Configuration-driven behavior for flexibility
-- Lazy loading architecture - resources loaded only when needed
-- Performance optimization with object pooling and deferred initialization
-- Network-ready design (multiplayer planned)
+- Component-based architecture
+- Signal-driven communication via EventBus
+- Factory patterns for object creation
+- Configuration-driven via .tres files
+- ID-based architecture with manager lookups (eliminates circular dependencies)
+- Lazy loading (resources loaded on-demand)
+- Object pooling for performance
 - Universal base functionality with specialized implementations
-- Question assumptions - find the right abstraction level
 
 ### **Core Systems Status**
 - **Player System**: Component-based with 6 specialized components
-- **Weapon System**: Operational with pistols, bullets, and melee weapons
+- **Weapon System**: Configuration-driven with event-based positioning (pistols, bullets, melee weapons)
 - **Universal Damage System**: All minigame types support damage with specialized handling
 - **Minigame Framework**: Flexible with 3 specialization levels + automatic UI cleanup
 - **Lives & Victory System**: Minigame-controlled for maximum flexibility (infinite lives, elimination, etc.)
@@ -35,7 +34,7 @@
 - **Data Persistence**: Versioned save/load with validation, extracted data structures
 - **Performance Systems**: Object pooling and monitoring with optimized logging
 - **Configuration**: Lazy-loaded configs with caching, extracted global config classes
-- **Lazy Loading Architecture**: Minimal startup overhead, resources loaded on-demand
+- **Lazy Loading Architecture**: Complete implementation - minimal startup overhead, all resources on-demand
 - **Memory Management**: Proper resource cleanup on shutdown
 - **Code Quality**: Clean static analysis results
 - **Parse Errors**: Critical bugs resolved - 30+ Logger calls, 26 inner classes, autoload conflicts
@@ -56,6 +55,7 @@ Additional Autoloads:
 - PerformanceDashboard: scripts/core/performance_dashboard.gd
 - DataManager: scripts/core/data_manager.gd
 - ConfigManager: scripts/core/config_manager.gd
+- PlayerManager: scripts/core/player_manager.gd  # NEW: ID-based player lookups
 ```
 
 ### **Core Systems**
@@ -132,7 +132,75 @@ class_name BasePlayer extends CharacterBody2D
 health.died.connect(_on_health_died)
 ```
 
-### **2. Weapon System (Operational Architecture)**
+### **2. ID-Based Architecture (Circular Dependency Fix)**
+
+Use `var player_id: int` + `PlayerManager.get_player(id)` for cross-system references.
+
+```gdscript
+# BaseWeapon.gd
+var holder_id: int = -1  # Not var holder: BasePlayer
+
+func pickup_by_id(player_id: int) -> bool:
+    var player: BasePlayer = PlayerManager.get_player(player_id)
+    holder_id = player_id
+    return true
+
+# PlayerManager.gd (autoload)
+var players: Dictionary = {}
+func register_player(player_id: int, player: BasePlayer) -> void:
+    players[player_id] = player
+func get_player(player_id: int) -> BasePlayer:
+    return players.get(player_id, null)
+
+# BasePlayer.gd
+func _ready() -> void:
+    PlayerManager.register_player(player_data.player_id, self)
+```
+
+### **3. Weapon System (Configuration-Driven + Event-Based Architecture)**
+
+**Configuration-Driven Weapon Properties**:
+```gdscript
+# BaseWeapon loads properties from ItemConfig .tres files
+func _ready() -> void:
+    super()
+    _load_weapon_config()  # Load from .tres files, not hard-coded @export
+
+func _apply_weapon_config(config: ItemConfig) -> void:
+    # Properties loaded from configuration files
+    base_damage = config.damage_amount
+    fire_rate = config.fire_rate
+    ammo_capacity = config.ammo_capacity
+    throw_damage_multiplier = config.throw_damage_multiplier
+    # Weapon-specific overrides in subclasses
+
+# Pistol-specific configuration loading
+func _apply_weapon_config(config: ItemConfig) -> void:
+    super._apply_weapon_config(config)
+    bullet_speed = config.bullet_speed
+    bullets_per_shot = config.bullets_per_shot
+    recoil_force = config.recoil_force
+```
+
+**Event-Driven Weapon Positioning**:
+```gdscript
+# BaseWeapon requests position via EventBus (no direct component access)
+func _physics_process(delta: float) -> void:
+    if is_held and holder:
+        _request_position_update()
+
+func _request_position_update() -> void:
+    var weapon_id: String = item_name
+    var holder_id: int = holder.player_data.player_id
+    EventBus.weapon_position_requested.emit(weapon_id, holder_id)
+    EventBus.weapon_facing_requested.emit(weapon_id, holder_id)
+
+# WeaponComponent responds to position requests
+func _on_weapon_position_requested(weapon_id: String, holder_id: int) -> void:
+    if player.player_data.player_id == holder_id and held_weapon.item_name == weapon_id:
+        var position: Vector2 = get_weapon_hold_position()
+        EventBus.weapon_position_provided.emit(weapon_id, position, 0.0)
+```
 
 **Item Lifecycle with Proper Pooling**:
 ```gdscript
@@ -144,12 +212,7 @@ func _shoot() -> bool:
     
     # Proper scene attachment
     get_tree().current_scene.add_child(bullet_obj)
-    bullet_obj.initialize(shoot_direction, global_position, holder)
-
-# Bullet signal management (prevent duplicate connections)
-func _ready() -> void:
-    if not body_shape_entered.is_connected(_on_body_shape_entered):
-        body_shape_entered.connect(_on_body_shape_entered)
+    bullet_obj.initialize(shoot_direction, global_position, holder_id)  # Use ID
 
 # ItemFactory with proper config classes
 static func create_item(item_id: String) -> BaseItem:
@@ -157,7 +220,7 @@ static func create_item(item_id: String) -> BaseItem:
     return config.item_scene.instantiate()
 ```
 
-### **3. UI Architecture (Factory + Manager Pattern)**
+### **4. UI Architecture (Factory + Manager Pattern)**
 
 **Design Philosophy**: Split UI responsibilities for clean separation of concerns
 - **UIFactory**: Creates UI elements with consistent styling and configuration
@@ -218,7 +281,7 @@ UIManager.hide_game_hud()  # Called automatically by BaseMinigame.end_minigame()
 - **Configuration-driven creation** - Use .tres files and UIElementConfig for styling
 - **No bypass routes** - UIManager only accepts UIFactory-created elements
 
-### **4. Minigame Inheritance Hierarchy (Clean Architecture + UI Management)**
+### **5. Minigame Inheritance Hierarchy (Clean Architecture + UI Management)**
 
 **Inheritance Chain** with automatic UI cleanup:
 ```gdscript
@@ -240,148 +303,46 @@ class_name SuddenDeathMinigame extends PhysicsMinigame
 # Inherits automatic UI cleanup from BaseMinigame
 ```
 
-### **4. Universal Damage System (Critical Thinking Pattern)**
+### **6. Universal Damage System**
 
-**The Problem**: Weapons weren't dealing damage - where should damage handling go?
+All minigame types handle damage via BaseMinigame, specialized by subclass.
 
-**Initial Thinking**: "Damage is for combat, put it in SuddenDeathMinigame"
 ```gdscript
-SuddenDeathMinigame._on_player_damage_reported()  # Too specific!
-```
-
-**Better Thinking**: "Combat happens in physics games, put it in PhysicsMinigame"
-```gdscript
-PhysicsMinigame._on_player_damage_reported()  # Still too narrow!
-```
-
-**Best Thinking**: **"Wait - what other games could have damage?"**
-- **Collection games**: Jump on other players, environmental hazards
-- **Vehicle games**: Crash damage, collision slowdowns, tire damage  
-- **Turn-based games**: Spell damage, attack actions, resource theft
-- **UI games**: Button-mashing penalties, reaction failures, momentum loss
-
-**Conclusion**: Damage is a **fundamental game mechanic**, not specific to any one type!
-
-**Universal Architecture Implemented**:
-```gdscript
-# BaseMinigame - ALL types get damage handling
-class_name BaseMinigame extends Node
-
+# BaseMinigame - Universal damage handling
 func initialize_minigame(context: MinigameContext) -> void:
-    # Universal damage connection for ALL minigame types
     EventBus.player_damage_reported.connect(_on_player_damage_reported)
 
-func _on_player_damage_reported(victim_id, attacker_id, damage, source_name) -> void:
-    var victim_data = find_player_in_context(victim_id)
-    # Delegate to subclass for specialized handling
-    _on_damage_reported(victim_id, attacker_id, damage, source_name, victim_data)
-
-# Virtual method - each type implements damage differently
+# Virtual method - override in subclasses
 func _on_damage_reported(victim_id, attacker_id, damage, source_name, victim_data) -> void:
-    # Default: log damage event
-    # Subclasses override for specific mechanics
+    pass  # Subclasses implement
+
+# PhysicsMinigame - Health damage
+func _on_damage_reported(...) -> void:
+    player_spawner.get_player(victim_id).take_damage(damage)
+
+# Other minigame types implement differently
 ```
 
-**Specialized Implementations**:
+### **5. Minigame-Controlled Lives & Victory**
+
+Minigames control their own lives/respawn rules. No automatic global decrementation.
+
 ```gdscript
-# PhysicsMinigame - Direct health damage
-func _on_damage_reported(...) -> void:
-    var player = player_spawner.get_player(victim_id)
-    player.take_damage(damage)  # Reduces health, triggers death
+# Tools available to minigames:
+respawn_manager.block_player_respawn(player_id)
+victory_condition_manager.eliminate_player(player_id)
+EventBus.emit_player_lives_changed(player_id, new_lives)
 
-# Future CollectionMinigame - Item/score penalty  
-func _on_damage_reported(...) -> void:
-    var player = get_collection_player(victim_id)
-    player.drop_collected_items(damage)  # Lose collected items
-    player.respawn_at_safe_location()     # Knockback effect
-
-# Future VehicleMinigame - Speed/performance penalty
-func _on_damage_reported(...) -> void:
-    var vehicle = get_player_vehicle(victim_id)
-    vehicle.reduce_speed(damage * 10)     # Slow down vehicle
-    vehicle.add_damage_effect(source_name) # Visual damage
-
-# Future TurnBasedMinigame - Queue for next turn
-func _on_damage_reported(...) -> void:
-    pending_damage_queue.append({
-        "victim": victim_id, "damage": damage, "source": source_name
-    })  # Apply on their next turn
-```
-
-### **5. Minigame-Controlled Lives & Victory System**
-
-**The Problem**: Different minigames need different lives/respawn rules - should this be automatic?
-
-**Previous Approach**: "Automatically decrement lives globally when any player dies"
-```gdscript
-GameManager._on_player_died():  # Always decrement lives
-    player_data.current_lives -= 1  # Too rigid!
-```
-
-**Problem with Global Automation**:
-- **Infinite Lives Games**: Can't have players respawn forever
-- **King of the Hill**: Lives might decrement based on zone control, not death
-- **Last Stand**: Players might start with 1 life only
-- **Survival Mode**: Lives might increase over time or with pickups
-
-**Better Architecture**: **"Each minigame controls its own rules"**
-
-**Minigame-Controlled Implementation**:
-```gdscript
-# RespawnManager - minigames control who can respawn
-respawn_manager.block_player_respawn(player_id)     # Prevent respawning
-respawn_manager.unblock_player_respawn(player_id)   # Allow respawning again
-
-# VictoryConditionManager - minigames control elimination
-victory_condition_manager.eliminate_player(player_id)  # Manual elimination
-
-# EventBus - minigames control UI updates
-EventBus.emit_player_lives_changed(player_id, new_lives)  # Update UI when needed
-```
-
-**Different Minigame Examples**:
-```gdscript
-# Sudden Death - 3 Lives Elimination
-class_name SuddenDeathMinigame extends PhysicsMinigame
-func _on_sudden_death_player_died(player_id: int) -> void:
-    player_data.current_lives -= 1  # Decrement for this mode
-    EventBus.emit_player_lives_changed(player_id, player_data.current_lives)
-    
+# SuddenDeathMinigame - Traditional 3 lives
+func _on_player_died(player_id: int) -> void:
+    player_data.current_lives -= 1
     if player_data.is_out_of_lives():
         respawn_manager.block_player_respawn(player_id)
-        victory_condition_manager.eliminate_player(player_id)
 
-# Infinite Lives - Never Eliminate
-class_name InfiniteLivesMinigame extends PhysicsMinigame
-func _on_physics_initialize() -> void:
-    # Never connect to death events - unlimited respawns
-    victory_condition_manager.victory_type = VictoryConditionManager.VictoryType.SCORE
-
-# King of the Hill - Zone-Based Lives
-class_name KingOfHillMinigame extends PhysicsMinigame
-func _on_player_left_hill(player: BasePlayer) -> void:
-    if outside_hill_too_long(player):
-        player.player_data.current_lives -= 1  # Custom lives logic
-        if player.player_data.is_out_of_lives():
-            respawn_manager.block_player_respawn(player.player_data.player_id)
-
-# Last Stand - Start with 1 Life
-class_name LastStandMinigame extends PhysicsMinigame  
-func _on_physics_initialize() -> void:
-    for player_data in context.participating_players:
-        player_data.current_lives = 1      # Override default
-        player_data.max_lives = 1
-        EventBus.emit_player_lives_changed(player_data.player_id, 1)
+# Other minigames implement different rules
 ```
 
-**Benefits of Minigame Control**:
-- **Flexibility**: Each game mode has complete freedom
-- **Clarity**: Lives logic is explicit and visible in each minigame
-- **Testing**: Easy to test different rule sets independently
-- **Modding**: Custom minigames can implement any lives system
-- **UI Consistency**: UI updates work the same regardless of rules
-
-### **6. Modern Godot 4.x Syntax Patterns**
+### **7. Modern Godot 4.x Syntax Patterns**
 ```gdscript
 # CORRECT: Super method calls (modern syntax)
 func get_item_info() -> Dictionary:
@@ -407,7 +368,7 @@ var temp_holder: BasePlayer = holder  # Preserve during _exit_tree()
 holder = temp_holder  # Restore after reparenting
 ```
 
-### **7. Factory Pattern Usage**
+### **8. Factory Pattern Usage**
 ```gdscript
 # Create players with configuration
 var player: BasePlayer = PlayerFactory.create_player("standard", player_data)
@@ -419,7 +380,7 @@ var bullet: Bullet = ItemFactory.create_item("bullet") as Bullet
 var minigame: BaseMinigame = MinigameFactory.create_minigame("sudden_death", context)
 ```
 
-### **8. Lazy Loading Architecture**
+### **9. Lazy Loading Architecture**
 ```gdscript
 # LAZY POOLING: Create pools only when first requested
 func get_item(item_id: String) -> Node:
@@ -452,7 +413,7 @@ func _ready() -> void:
     _initialize_session()  # Creates players before game mode selected
 ```
 
-### **9. Configuration System** (Lazy Loading Architecture)
+### **10. Configuration System** (Lazy Loading Architecture)
 ```gdscript
 # LAZY LOADING: Configurations loaded only when requested (minimal startup overhead)
 var config: PlayerConfig = ConfigManager.get_player_config("standard")  # Loads on first access
@@ -477,11 +438,43 @@ var move_speed: float = game_config.default_move_speed
 
 # Config .tres files use proper ExtResource syntax (not preload):
 # [gd_resource type="Resource" format=3 load_steps=2]
-# [ext_resource type="Script" path="res://configs/player_configs/player_config.gd" id="1_script"]
-# [ext_resource type="PackedScene" path="res://scenes/player/base_player.tscn" id="2_scene"]
+# [ext_resource type="Script" path="res://configs/item_configs/item_config.gd" id="item_config_script"]
+# [ext_resource type="PackedScene" path="res://scenes/weapons/pistol.tscn" id="pistol_scene"]
 # [resource]
-# script = ExtResource("1_script")
-# player_scene = ExtResource("2_scene")
+# script = ExtResource("item_config_script")
+# item_scene = ExtResource("pistol_scene")
+```
+
+### **11. ExtResource Best Practices** (Robust Resource References)
+```gdscript
+# WRONG: Brittle numeric IDs that break when adding resources
+[ext_resource type="Script" path="res://configs/item_configs/item_config.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/pistol.tscn" id="2_scene"]
+[ext_resource type="Texture2D" path="res://assets/icons/pistol_icon.png" id="3_icon"]
+
+[resource]
+script = ExtResource("1_script")        # What's "1_script"? Hard to read
+item_scene = ExtResource("2_scene")     # Adding resources requires renumbering
+icon_texture = ExtResource("3_icon")    # Copy-paste errors common
+
+# RIGHT: Descriptive IDs that are self-documenting and extensible
+[ext_resource type="Script" path="res://configs/item_configs/item_config.gd" id="item_config_script"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/pistol.tscn" id="pistol_scene"]
+[ext_resource type="Texture2D" path="res://assets/icons/pistol_icon.png" id="pistol_icon"]
+[ext_resource type="AudioStream" path="res://assets/sounds/pistol_fire.ogg" id="pistol_sound"]
+
+[resource]
+script = ExtResource("item_config_script")  # Clear purpose
+item_scene = ExtResource("pistol_scene")    # Self-documenting
+icon_texture = ExtResource("pistol_icon")   # Easy to add new resources
+fire_sound = ExtResource("pistol_sound")    # No renumbering cascade
+
+# ExtResource Guidelines:
+# - Use descriptive names: "player_scene" not "2_scene"
+# - Follow naming patterns: "weapon_icon", "weapon_sound", "weapon_animation"
+# - Be consistent across similar configs
+# - Avoid special characters: letters_numbers_underscores only
+# - IDs are arbitrary - they just need to be unique within each file
 ```
 
 ## Current Implementation Status
@@ -577,12 +570,13 @@ steam_lobby._on_host_button_pressed()  # Not manual RetryHandler creation!
 4. Update component initialization in BasePlayer
 
 ### **Adding Items/Weapons**
-1. Extend BaseItem or create specialized class
-2. Implement reset(), activate(), deactivate() for pooling
-3. Create scene with proper collision layers
-4. Add to PoolManager configuration
-5. Create ItemConfig resource
-6. **Ensure proper signal management** to prevent connection conflicts
+1. Extend BaseWeapon for combat items (inherits configuration loading)
+2. Override _apply_weapon_config() for specialized properties
+3. Create scene with proper collision layers and components
+4. **Create ItemConfig .tres file** with all weapon properties
+5. Add to PoolManager configuration if pooled
+6. **Test configuration changes** - modify .tres files to see immediate gameplay effects
+7. **Ensure proper signal management** to prevent connection conflicts
 
 ### **Extending UI**
 1. **Create through UIFactory** - Use `UIFactory.create_ui_element()` for generic elements
@@ -605,6 +599,8 @@ steam_lobby._on_host_button_pressed()  # Not manual RetryHandler creation!
 - Load resources eagerly in _ready() - use lazy loading patterns
 - Pre-warm object pools - create pools only when needed
 - Initialize systems before they're selected/used
+- **Create circular dependencies** - Use ID-based architecture with PlayerManager lookups
+- **Use direct object references across system boundaries** - Use IDs and lookup when needed
 - **Create UI elements manually** - Use UIFactory for all UI creation
 - **Bypass UIManager for global UI** - Screen navigation and overlays must use UIManager
 - **Mix UI creation approaches** - UIFactory + UIManager is the only pattern
@@ -625,6 +621,7 @@ steam_lobby._on_host_button_pressed()  # Not manual RetryHandler creation!
 - Clear holder references during reparenting operations
 - Add default health values to GameConfig - health is per-minigame
 - Manually add UI cleanup to specialized minigame classes
+- **Use numeric ExtResource IDs** - Use descriptive names like "pistol_scene" not "2_scene"
 
 ### **DO**
 - Use strict typing throughout (`var name: String`)
@@ -636,6 +633,12 @@ steam_lobby._on_host_button_pressed()  # Not manual RetryHandler creation!
 - Use lazy loading - load resources only when needed
 - Initialize systems only when game modes are selected
 - Create pools on-demand, not in _ready() methods
+- **Use ID-based architecture** - `var player_id: int` + `PlayerManager.get_player(id)` for cross-system references
+- **Register players in PlayerManager** - Call `PlayerManager.register_player()` in `BasePlayer._ready()`
+- **Use pickup_by_id() for weapons** - Eliminates circular dependencies
+- **Load weapon properties from ItemConfig** - Call `_load_weapon_config()` in `_ready()`, override `_apply_weapon_config()` for specialized properties
+- **Use EventBus for weapon positioning** - Request position via `EventBus.weapon_position_requested.emit()`, respond in WeaponComponent
+- **Test .tres file changes** - Modify weapon configs and see immediate gameplay effects
 - Use `super.method_name()` for parent method calls
 - Use Dictionary structures for complex data instead of inner classes
 - Call static methods directly without conditional checks
@@ -654,6 +657,7 @@ steam_lobby._on_host_button_pressed()  # Not manual RetryHandler creation!
 - Create temporary test scenes for validating changes, then delete them after testing
 - Test actual user interaction paths - Simulate button clicks and follow the same method chains users trigger
 - Use await when calling abort_minigame() - BaseMinigame handles cleanup timing automatically
+- **Use descriptive ExtResource IDs** - "pistol_scene" instead of "2_scene" for maintainability
 
 ## Performance Considerations
 
@@ -729,11 +733,33 @@ if not body_shape_entered.is_connected(_on_body_shape_entered):
 
 ### **Weapon System Patterns**
 ```gdscript
+# Configuration-driven weapon initialization
+func _ready() -> void:
+    super()
+    _load_weapon_config()  # Load properties from .tres files
+
+func _apply_weapon_config(config: ItemConfig) -> void:
+    # Base weapon properties from ItemConfig
+    base_damage = config.damage_amount
+    fire_rate = config.fire_rate
+    ammo_capacity = config.ammo_capacity
+    throw_damage_multiplier = config.throw_damage_multiplier
+
+# Event-driven weapon positioning (no direct component access)
+func _physics_process(delta: float) -> void:
+    if is_held and holder:
+        _request_position_update()
+
+func _request_position_update() -> void:
+    var weapon_id: String = item_name
+    var holder_id: int = holder.player_data.player_id
+    EventBus.weapon_position_requested.emit(weapon_id, holder_id)
+
 # Proper bullet creation and pooling
 var bullet: Node = PoolManager.get_bullet()
 var bullet_obj: Bullet = bullet as Bullet
 bullet_obj.is_pooled = true
-bullet_obj.initialize(direction, position, shooter)
+bullet_obj.initialize(direction, position, holder_id)  # Use ID
 
 # Item attachment with holder preservation
 var temp_holder: BasePlayer = holder
@@ -767,6 +793,29 @@ if player_config and player_config.player_scene:
 
 # ConfigManager._ready() no longer pre-loads configs - minimal startup overhead
 # Configs cached after first access for performance
+```
+
+### **ExtResource Best Practices** (Robust Resource References)
+```gdscript
+# WRONG: Brittle numeric IDs
+[ext_resource type="PackedScene" path="res://scenes/weapons/pistol.tscn" id="2_scene"]
+item_scene = ExtResource("2_scene")  # Hard to read, breaks when adding resources
+
+# RIGHT: Descriptive IDs
+[ext_resource type="PackedScene" path="res://scenes/weapons/pistol.tscn" id="pistol_scene"]
+item_scene = ExtResource("pistol_scene")  # Self-documenting, extensible
+
+# Adding new resources - easy with descriptive IDs
+[ext_resource type="Script" path="res://configs/item_configs/item_config.gd" id="item_config_script"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/pistol.tscn" id="pistol_scene"]
+[ext_resource type="Texture2D" path="res://assets/icons/pistol_icon.png" id="pistol_icon"]
+[ext_resource type="AudioStream" path="res://assets/sounds/pistol_fire.ogg" id="pistol_sound"]
+
+# Usage in resource files
+script = ExtResource("item_config_script")
+item_scene = ExtResource("pistol_scene")
+icon_texture = ExtResource("pistol_icon")
+fire_sound = ExtResource("pistol_sound")
 ```
 
 ### **Universal Damage System Patterns**
@@ -943,6 +992,31 @@ await some_minigame.abort_minigame()  # Cleanup timing handled automatically
 
 **Result**: **Fail-safe architecture** - All minigame types get proper cleanup timing automatically, impossible to forget
 
+### **Architecture Refactor Completion - Mario Party Foundation Complete**
+**Date**: Latest Implementation
+**Scope**: Completed the 3 remaining architecture tasks for Mario Party-style minigame foundation
+
+**Task 1 - Configuration-Driven Weapon Properties**:
+- **Replaced hard-coded @export values** in BaseWeapon with ItemConfig loading
+- **Extended ItemConfig** with melee properties (swing_range, swing_damage, knockback_force)
+- **Added _load_weapon_config()** and **_apply_weapon_config()** methods
+- **Updated pistol.tres and bat.tres** with complete weapon specifications
+- **Pistol and Bat subclasses** override config application for specialized properties
+
+**Task 2 - Event-Driven Weapon Positioning**:
+- **Added EventBus positioning system** with weapon_position_requested/provided signals
+- **BaseWeapon _physics_process()** requests position updates when held
+- **WeaponComponent responds** to position requests with proper holder validation
+- **Eliminates direct component access** - weapons position via EventBus communication only
+
+**Task 3 - Complete Lazy Loading Implementation**:
+- **HUDController** - Player HUD scene lazy loaded when creating HUD
+- **Main.gd** - All scenes (menu, map, minigames) lazy loaded on first access
+- **PlayerSpawner** - Player scene lazy loaded when first spawning
+- **Faster startup times** - no resources loaded during application initialization
+
+**Result**: **Mario Party Foundation Complete** - Data-driven weapons, event-driven positioning, complete lazy loading, ready for unlimited minigame variety with Duck Game combat mechanics.
+
 ### **Configuration System Health**
 **Status**: Removed inappropriate `default_max_health` from GameConfig
 - Health should be managed per-minigame or player config, not globally
@@ -960,92 +1034,34 @@ await some_minigame.abort_minigame()  # Cleanup timing handled automatically
 
 ## For AI Agents: Development Guidelines
 
-### **1. Critical Thinking Pattern for Architecture**
+### **1. Architecture Design Pattern**
 
-**When designing any system, ask these questions:**
+When adding functionality, ask:
+1. Where does this belong?
+2. What other systems might need this?
+3. What's the most general case?
+4. How would different types implement this?
 
-1. **"Where does this functionality belong?"** - Start with the obvious answer
-2. **"What other systems might need this?"** - Challenge your assumptions  
-3. **"What's the most general case?"** - Find the right abstraction level
-4. **"How would different types implement this differently?"** - Design for specialization
+Find the right abstraction level. Design for universal base functionality with specialized implementations.
 
-**Example: Universal Damage System**
-```
-Question 1: "Where does weapon damage belong?"
-Initial Answer: "SuddenDeathMinigame" (specific to combat)
+### **2. Minigame Lives & Victory Control**
 
-Question 2: "What other games might have damage?"  
-Better Answer: "PhysicsMinigame" (any physics-based game)
+Minigames control their own rules. No automatic behavior.
 
-Question 3: "What's the most general case?"
-Best Answer: "BaseMinigame" (ANY game type could have damage)
-
-Question 4: "How would they differ?"
-Implementation: Virtual method with specialized overrides
-- Physics: Direct health damage
-- Collection: Lose collected items  
-- Vehicle: Reduce speed/performance
-- Turn-based: Queue damage for turns
-```
-
-**Apply this pattern to ALL system design decisions!**
-
-### **2. Minigame-Controlled Lives & Victory System**
-
-**Core Principle**: Minigames have complete control over their lives and victory rules.
-
-**Global Systems Provide Tools, NOT Automatic Behavior**:
 ```gdscript
-# DON'T: Assume automatic lives management
-# GameManager will NOT automatically decrement lives
-# VictoryConditionManager will NOT automatically eliminate players
-# RespawnManager will NOT automatically check lives
+# Available tools:
+respawn_manager.block_player_respawn(player_id)
+victory_condition_manager.eliminate_player(player_id)
+EventBus.emit_player_lives_changed(player_id, new_lives)
 
-# DO: Explicitly control your minigame's rules
-class_name MyMinigame extends PhysicsMinigame
-
+# Pattern: Connect to events YOU want to handle
 func _on_physics_initialize() -> void:
-    # Connect to events YOU want to handle
     EventBus.player_died.connect(_on_my_minigame_player_died)
 
 func _on_my_minigame_player_died(player_id: int) -> void:
-    # YOUR minigame decides what happens on death
-    var player_data: PlayerData = GameManager.get_player_data(player_id)
-    
-    # Option 1: Traditional lives system
-    player_data.current_lives -= 1
-    EventBus.emit_player_lives_changed(player_id, player_data.current_lives)
-    if player_data.is_out_of_lives():
-        respawn_manager.block_player_respawn(player_id)
-        victory_condition_manager.eliminate_player(player_id)
-    
-    # Option 2: Infinite lives - do nothing special
-    # Option 3: Custom mechanics - your choice!
+    # Your minigame decides what happens
+    pass
 ```
-
-**Available Control Methods**:
-```gdscript
-# Respawn Control
-respawn_manager.block_player_respawn(player_id)     # Stop respawning
-respawn_manager.unblock_player_respawn(player_id)   # Allow respawning
-
-# Victory Control  
-victory_condition_manager.eliminate_player(player_id) # Manual elimination
-victory_condition_manager.victory_type = VictoryConditionManager.VictoryType.SCORE
-
-# UI Updates
-EventBus.emit_player_lives_changed(player_id, new_lives) # Update lives display
-
-# Lives Modification
-player_data.current_lives = new_value  # Set directly
-player_data.max_lives = new_max        # Change maximum
-```
-
-**Common Patterns**:
-- **Elimination Mode**: Connect to death events, decrement lives, eliminate when 0
-- **Infinite Lives**: Don't connect to death events, use score/time victory
-- **Custom Lives**: Connect to custom events (zone exit, objectives, etc.)
-- **Mixed Rules**: Different players can have different rules in same game
 
 ### **3. Weapon System Development**
 ```gdscript
@@ -1170,7 +1186,7 @@ if not signal_name.is_connected(callback_method):
 7. **Follow lazy loading principles**: Load resources only when needed, minimal startup overhead
 8. **Use modern syntax**: `super.method()`, Dictionary structures, direct static calls
 9. **Use existing patterns**: Factory, configuration, pooling systems in place
-10. **Check autoloads**: 9 global systems handle cross-cutting concerns
+10. **Check autoloads**: 10 global systems handle cross-cutting concerns (including PlayerManager)
 11. **Implement proper cleanup**: Always add `_exit_tree()` methods for resource management
 12. **Prevent warnings**: Use type-safe ternary operators, descriptive variable names, proper static calls
 13. **Test your changes**: Create temporary test scenes to validate specific changes, follow actual user interaction paths, then delete them
@@ -1187,6 +1203,9 @@ if not signal_name.is_connected(callback_method):
    - Signal connection safety: `if not signal.is_connected(method):`
    - Object pooling state: `object.is_pooled = true`
    - Holder preservation: `temp_holder = holder` during reparenting
+   - **ID-based architecture**: `var player_id: int` + `PlayerManager.get_player(id)` for cross-system references
+   - **Weapon pickup**: `weapon.pickup_by_id(player.player_data.player_id)` not `weapon.pickup(player)`
+   - **Player registration**: `PlayerManager.register_player(player_data.player_id, self)` in `BasePlayer._ready()`
    - Universal damage: `EventBus.report_player_damage()` from sources, `_on_damage_reported()` in minigames
    - UI creation: `UIFactory.create_*()` → `UIManager.show_*()` for all UI elements
    - `Time.get_unix_time_from_system()` for timestamps
@@ -1194,7 +1213,9 @@ if not signal_name.is_connected(callback_method):
    - Type conversion in ternary: `str(node.name) if node else "Default"`
 21. **Reference this document**: All critical information is here
 
-**Remember**: This codebase has modern architecture with operational weapon system, universal damage handling across all minigame types, **complete UI consistency via Factory + Manager pattern**, and lazy loading architecture. The inheritance hierarchy is clean, type annotations are comprehensive, super() calls use correct syntax, weapon system is operational with proper pooling and signal management, **UI architecture enforces 100% consistency with no manual creation bypasses**, damage system is universal with specialized implementations, lazy loading provides minimal startup overhead, and the design maintains integrity. **Apply the critical thinking pattern** - question assumptions, find the right abstraction level, design for universal base functionality with specialized implementations. Focus on feature development using established patterns - the foundation is architecturally sound and ready for development with clean code quality and optimized performance through lazy loading.
+## Summary
+
+Architecture is stable. Use established patterns: components, factories, configs, ID-based references, lazy loading, object pooling. Follow existing conventions.
 
 ### **Testing Commands**
 

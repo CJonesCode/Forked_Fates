@@ -1,17 +1,31 @@
 [gd_resource type="Resource" format=3 load_steps=2]
 
-[ext_resource type="Script" path="res://configs/item_configs/item_config.gd" id="1_script"]
-[ext_resource type="PackedScene" path="res://scenes/items/bat.tscn" id="2_scene"]
+[ext_resource type="Script" path="res://configs/item_configs/item_config.gd" id="item_config_script"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/bat.tscn" id="bat_scene"]
 
 [resource]
-script = ExtResource("1_script")
+script = ExtResource("item_config_script")
 item_id = "bat"
 item_name = "Bat"
 item_type = 0
-item_scene = ExtResource("2_scene")
-scene_path = "res://scenes/items/bat.tscn"
+item_scene = ExtResource("bat_scene")
+scene_path = "res://scenes/weapons/bat.tscn"
 use_pooling = true
-damage_amount = 2
+damage_amount = 3
 use_duration = 0.8
 rarity = 2
-description = "A sturdy melee weapon for close combat" 
+description = "A sturdy melee weapon for close combat"
+fire_rate = 0.8
+ammo_capacity = -1
+bullet_speed = 0.0
+throw_damage_multiplier = 1.8
+max_throw_force = 600.0
+can_ricochet = true
+max_ricochets = 2
+recoil_force = 0.0
+spread_angle = 0.0
+bullets_per_shot = 0
+muzzle_flash_duration = 0.0
+swing_range = 80.0
+swing_damage = 3
+knockback_force = 300.0 

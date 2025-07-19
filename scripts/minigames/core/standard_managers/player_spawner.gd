@@ -5,7 +5,7 @@ extends Node
 ## Handles player creation, positioning, respawning, and cleanup
 
 # Configuration
-@export var player_scene: PackedScene = preload("res://scenes/player/base_player.tscn")
+@export var player_scene: PackedScene  # Lazy loaded when spawning
 @export var auto_setup_input: bool = true
 @export var apply_player_colors: bool = true
 
@@ -69,8 +69,11 @@ func spawn_all_players(player_data_array: Array[PlayerData]) -> void:
 ## Spawn a single player at a specific position
 func spawn_player(player_data: PlayerData, position: Vector2) -> BasePlayer:
 	if not player_scene:
-		Logger.error("No player scene configured for PlayerSpawner", "PlayerSpawner")
-		return null
+		# Lazy load player scene when first needed
+		player_scene = load("res://scenes/player/base_player.tscn")
+		if not player_scene:
+			Logger.error("Failed to load player scene", "PlayerSpawner")
+			return null
 	
 	# Create player instance
 	var player_instance: BasePlayer = player_scene.instantiate()

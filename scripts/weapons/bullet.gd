@@ -1,4 +1,4 @@
-class_name Bullet
+class_name ProjectileBullet
 extends RigidBody2D
 
 ## Bullet projectile for projectile-style weapons with object pooling support
@@ -13,7 +13,7 @@ extends RigidBody2D
 
 # State
 var velocity_vector: Vector2 = Vector2.ZERO
-var shooter: BasePlayer = null
+var shooter_id: int = -1  # ID instead of object reference
 var is_pooled: bool = false
 var lifetime_timer: float = 0.0
 var ricochet_count: int = 0
@@ -61,16 +61,17 @@ func _physics_process(delta: float) -> void:
 	if velocity_vector.length() > 0:
 		rotation = velocity_vector.angle()
 
-## Initialize bullet with direction, position, and shooter
-func initialize(direction: Vector2, spawn_position: Vector2, bullet_shooter: BasePlayer) -> void:
+## Initialize bullet with direction, position, and shooter ID
+func initialize(direction: Vector2, spawn_position: Vector2, bullet_shooter_id: int) -> void:
 	velocity_vector = direction * speed
 	global_position = spawn_position
-	shooter = bullet_shooter
+	shooter_id = bullet_shooter_id
 	lifetime_timer = 0.0
 	ricochet_count = 0
 	penetration_count = 0
 	
 	# Set collision exclusions - don't hit shooter initially
+	var shooter: BasePlayer = PlayerManager.get_player(shooter_id)
 	if shooter:
 		# Add shooter to excluded bodies to prevent immediate collision
 		var shooter_collision = shooter.get_node("CollisionShape2D") as CollisionShape2D
@@ -79,7 +80,7 @@ func initialize(direction: Vector2, spawn_position: Vector2, bullet_shooter: Bas
 			# Note: This is a simplified exclusion - proper implementation would need collision layers
 	
 	# Set damage from shooter's weapon if available
-	var weapon_component: WeaponComponent = shooter.get_component(WeaponComponent) if shooter else null
+	var weapon_component: WeaponComponent = shooter.weapon if shooter else null
 	if weapon_component and weapon_component.get_held_weapon():
 		var weapon: BaseWeapon = weapon_component.get_held_weapon()
 		damage = weapon.base_damage
@@ -97,9 +98,11 @@ func _on_body_shape_entered(body_rid: RID, body: Node, body_shape_index: int, lo
 	Logger.debug("Bullet collision with: " + body.name + " (" + body.get_class() + ")", "Bullet")
 	
 	# Don't hit the shooter immediately
-	if body == shooter:
-		Logger.debug("Ignoring collision with shooter", "Bullet")
-		return
+	if body is BasePlayer:
+		var player: BasePlayer = body as BasePlayer
+		if player.player_data and player.player_data.player_id == shooter_id:
+			Logger.debug("Ignoring collision with shooter", "Bullet")
+			return
 	
 	# Handle player hits
 	if body is BasePlayer:
@@ -117,21 +120,24 @@ func _on_body_shape_entered(body_rid: RID, body: Node, body_shape_index: int, lo
 
 ## Handle hitting a player
 func _hit_player(player: BasePlayer) -> void:
-	if not player or not shooter:
+	var shooter: BasePlayer = PlayerManager.get_player(shooter_id)
+	if not player:
 		_destroy_bullet()
 		return
 	
 	# Report damage through universal damage system
-	if player.player_data and shooter.player_data:
+	var player_data: PlayerData = player.get_player_data()
+	var shooter_data: PlayerData = shooter.player_data if shooter else null
+	if player_data and shooter_data:
 		EventBus.report_player_damage(
-			player.player_data.player_id,
-			shooter.player_data.player_id,
+			player_data.player_id,
+			shooter_data.player_id,
 			damage,
 			"Bullet"
 		)
 		
-		var player_name: String = player.player_data.player_name
-		var shooter_name: String = shooter.player_data.player_name
+		var player_name: String = player_data.player_name
+		var shooter_name: String = shooter_data.player_name
 		Logger.combat("Bullet from " + shooter_name + " hit " + player_name + " for " + str(damage) + " damage", "Bullet")
 	
 	# Check for penetration (enhanced projectile mechanic)
@@ -211,7 +217,7 @@ func reset_for_pool() -> void:
 	velocity_vector = Vector2.ZERO
 	linear_velocity = Vector2.ZERO
 	angular_velocity = 0.0
-	shooter = null
+	shooter_id = -1
 	lifetime_timer = 0.0
 	ricochet_count = 0
 	penetration_count = 0
@@ -273,5 +279,18 @@ func get_bullet_status() -> Dictionary:
 		"ricochets_remaining": max_ricochets - ricochet_count,
 		"penetrations_remaining": max_penetrations - penetration_count,
 		"is_pooled": is_pooled,
-		"shooter": shooter.player_data.player_name if shooter and shooter.player_data else "None"
-	} 
+		"shooter": get_shooter_name()
+	}
+
+## Get shooter player object (type-safe lookup)
+func get_shooter() -> BasePlayer:
+	if shooter_id == -1:
+		return null
+	return PlayerManager.get_player(shooter_id)
+
+## Get shooter name for debugging
+func get_shooter_name() -> String:
+	var shooter: BasePlayer = get_shooter()
+	if shooter and shooter.player_data:
+		return shooter.player_data.player_name
+	return "None" 

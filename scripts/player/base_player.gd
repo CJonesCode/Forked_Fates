@@ -4,6 +4,7 @@ extends CharacterBody2D
 ## Base player class using component architecture
 ## Acts as coordinator for player components: movement, health, weapon, input, ragdoll
 ## Pure projectile-based weapon system
+## Implements IWeaponHolder interface for weapon management
 
 # Player states
 enum PlayerState {
@@ -57,6 +58,9 @@ func _ready() -> void:
 	# Setup components
 	_setup_components()
 	_connect_component_signals()
+	
+	# Register with PlayerManager for ID-based lookups
+	PlayerManager.register_player(player_data.player_id, self)
 	
 	Logger.system("BasePlayer initialized: " + player_data.player_name + " with projectile weapon system", "BasePlayer")
 
@@ -307,13 +311,13 @@ func _on_movement_jumped() -> void:
 
 ## Projectile weapon component signal handlers
 func _on_weapon_picked_up(weapon_obj: BaseWeapon) -> void:
-	Logger.pickup(player_data.player_name + " picked up " + weapon_obj.weapon_name, "BasePlayer")
+	Logger.pickup(player_data.player_name + " picked up " + weapon_obj.item_name, "BasePlayer")
 
 func _on_weapon_thrown(weapon_obj: BaseWeapon, throw_velocity: Vector2) -> void:
-	Logger.combat(weapon_obj.weapon_name + " thrown by " + player_data.player_name, "BasePlayer")
+	Logger.combat(weapon_obj.item_name + " thrown by " + player_data.player_name, "BasePlayer")
 
 func _on_weapon_fired(weapon_obj: BaseWeapon) -> void:
-	Logger.combat(weapon_obj.weapon_name + " fired by " + player_data.player_name, "BasePlayer")
+	Logger.combat(weapon_obj.item_name + " fired by " + player_data.player_name, "BasePlayer")
 
 func _on_nearby_weapons_changed(nearby_weapons: Array[BaseWeapon]) -> void:
 	Logger.debug(player_data.player_name + " nearby weapons: " + str(nearby_weapons.size()), "BasePlayer")
@@ -353,4 +357,41 @@ func _on_ragdoll_entered() -> void:
 func _on_ragdoll_exited() -> void:
 	if current_state == PlayerState.RAGDOLLED:
 		current_state = PlayerState.ALIVE
-		EventBus.player_recovered.emit(player_data.player_id) 
+		EventBus.player_recovered.emit(player_data.player_id)
+
+# IWeaponHolder interface implementation
+
+## Get weapon hold position from weapon component
+func get_weapon_hold_position() -> Vector2:
+	if weapon and weapon.has_method("get_weapon_hold_position"):
+		return weapon.get_weapon_hold_position()
+	return global_position
+
+## Get facing direction from movement component
+func get_facing_direction() -> int:
+	if movement:
+		return movement.facing_direction
+	return 1
+
+## Get player ID from player data
+func get_player_id() -> int:
+	if player_data:
+		return player_data.player_id
+	return -1
+
+## Get player data reference
+func get_player_data() -> PlayerData:
+	return player_data
+
+## Get current velocity for weapon interfaces
+func get_current_velocity() -> Vector2:
+	return velocity
+
+## Check if player can hold weapons based on state
+func can_hold_weapons() -> bool:
+	return current_state == PlayerState.ALIVE
+
+func _exit_tree() -> void:
+	# Unregister from PlayerManager for proper cleanup
+	if player_data:
+		PlayerManager.unregister_player(player_data.player_id)

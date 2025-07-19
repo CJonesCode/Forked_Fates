@@ -4,20 +4,20 @@ extends BaseWeapon
 ## Projectile-style pistol weapon with ranged shooting mechanics
 ## Fires bullets with recoil and can be thrown as dangerous projectile
 
-# Bullet properties
-@export var bullet_speed: float = 800.0
-@export var bullet_lifetime: float = 5.0
-@export var bullets_per_shot: int = 1
-@export var spread_angle: float = 0.0
-@export var muzzle_flash_duration: float = 0.1
+# Configuration-loaded bullet properties (replaces hard-coded @export values)
+var bullet_speed: float = 800.0
+var bullet_lifetime: float = 5.0
+var bullets_per_shot: int = 1
+var spread_angle: float = 0.0
+var muzzle_flash_duration: float = 0.1
 
-# Recoil properties  
-@export var recoil_force: float = 150.0
-@export var recoil_recovery_time: float = 0.3
+# Configuration-loaded recoil properties  
+var recoil_force: float = 150.0
+var recoil_recovery_time: float = 0.3
 
-# Component references
-@onready var muzzle_position: Marker2D = $MuzzlePosition
-@onready var muzzle_flash: Sprite2D = $MuzzleFlash
+# Component references (optional - may not exist in scene)
+var muzzle_position: Marker2D
+var muzzle_flash: Sprite2D
 
 # Shooting state
 var muzzle_flash_timer: float = 0.0
@@ -25,22 +25,19 @@ var muzzle_flash_timer: float = 0.0
 func _ready() -> void:
 	super()
 	
-	# Set weapon properties (projectile naming)
-	weapon_name = "Pistol"
-	fire_rate = 1.5
-	base_damage = 2  # Higher damage for projectile feel
-	ammo_capacity = 6
+	# Load configuration-driven properties (done in super() call)
+	# ammo_current is set based on config ammo_capacity
 	ammo_current = ammo_capacity
 	
-	# Throwing properties
-	throw_damage_multiplier = 1.3
-	can_ricochet = false
+	# Get optional component references
+	muzzle_position = get_node_or_null("MuzzlePosition")
+	muzzle_flash = get_node_or_null("MuzzleFlash")
 	
-	# Hide muzzle flash initially
+	# Hide muzzle flash initially if it exists
 	if muzzle_flash:
 		muzzle_flash.visible = false
 	
-	Logger.system("Pistol initialized with projectile mechanics", "Pistol")
+	Logger.system("Pistol initialized with config-driven properties: damage=" + str(base_damage) + ", ammo=" + str(ammo_capacity), "Pistol")
 
 func _physics_process(delta: float) -> void:
 	super(delta)
@@ -98,7 +95,7 @@ func _get_fire_direction() -> Vector2:
 func _spawn_bullet(base_direction: Vector2, bullet_index: int) -> void:
 	# Get bullet from pool
 	var bullet: Node = PoolManager.get_bullet()
-	var bullet_obj: Bullet = bullet as Bullet
+	var bullet_obj = bullet  # Use generic Node to avoid type issues
 	bullet_obj.is_pooled = true
 	
 	# Calculate spread for this bullet
@@ -118,8 +115,11 @@ func _spawn_bullet(base_direction: Vector2, bullet_index: int) -> void:
 	# Add bullet to scene
 	get_tree().current_scene.add_child(bullet_obj)
 	
-	# Initialize bullet
-	bullet_obj.initialize(fire_direction, spawn_position, holder)
+	# Initialize bullet with holder's player ID
+	var holder_id: int = -1
+	if holder and holder.player_data:
+		holder_id = holder.player_data.player_id
+	bullet_obj.initialize(fire_direction, spawn_position, holder_id)
 	
 	Logger.debug("Bullet spawned with direction: " + str(fire_direction), "Pistol")
 
@@ -166,8 +166,8 @@ func get_weapon_info() -> Dictionary:
 	return info
 
 ## Override throw behavior for enhanced pistol projectiles
-func throw_weapon(direction: Vector2, force: float, thrower: BasePlayer) -> bool:
-	var can_throw = super.throw_weapon(direction, force, thrower)
+func throw_weapon(direction: Vector2, force: float, thrower_id: int) -> bool:
+	var can_throw = super.throw_weapon(direction, force, thrower_id)
 	
 	if can_throw:
 		# Projectile enhancement: Thrown pistols are especially dangerous when loaded
@@ -176,4 +176,17 @@ func throw_weapon(direction: Vector2, force: float, thrower: BasePlayer) -> bool
 			# Bonus damage for loaded pistols (projectile style)
 			throw_damage = int(throw_damage * 1.5)
 	
-	return can_throw 
+	return can_throw
+
+## Override to apply pistol-specific configuration properties
+func _apply_weapon_config(config: ItemConfig) -> void:
+	super._apply_weapon_config(config)
+	
+	# Apply pistol-specific properties from config
+	bullet_speed = config.bullet_speed
+	bullets_per_shot = config.bullets_per_shot
+	spread_angle = config.spread_angle
+	muzzle_flash_duration = config.muzzle_flash_duration
+	recoil_force = config.recoil_force
+	
+	Logger.system("Applied pistol config: bullet_speed=" + str(bullet_speed) + ", recoil=" + str(recoil_force), "Pistol") 

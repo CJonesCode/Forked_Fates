@@ -4,7 +4,8 @@ extends RefCounted
 enum ItemType {
 	WEAPON,
 	CONSUMABLE,
-	UTILITY,
+	OBJECTIVE,
+	TRIGGER,
 	PROJECTILE
 }
 
@@ -44,9 +45,47 @@ static func create_item_from_config(config: ItemConfig, spawn_position: Vector2 
 	
 	return item
 
-# Simplified weapon creation using ItemConfig
-static func create_weapon(weapon_id: String, spawn_position: Vector2 = Vector2.ZERO) -> BaseItem:
-	return create_item_from_config(_load_item_config(weapon_id), spawn_position)
+# Specialized factory methods for unified item hierarchy
+
+## Create weapon (BaseWeapon extends BaseItem)
+static func create_weapon(weapon_id: String, spawn_position: Vector2 = Vector2.ZERO) -> BaseWeapon:
+	var item = create_item_from_config(_load_item_config(weapon_id), spawn_position)
+	return item as BaseWeapon
+
+# TODO: Implement after creating ConsumableItem, ObjectiveItem, TriggerItem classes
+# ## Create consumable item (health, powerups)
+# static func create_consumable(consumable_id: String, spawn_position: Vector2 = Vector2.ZERO) -> ConsumableItem:
+# 	var item = create_item_from_config(_load_item_config(consumable_id), spawn_position)
+# 	return item as ConsumableItem
+
+# ## Create objective item (keys, collectibles)
+# static func create_objective(objective_id: String, spawn_position: Vector2 = Vector2.ZERO) -> ObjectiveItem:
+# 	var item = create_item_from_config(_load_item_config(objective_id), spawn_position)
+# 	return item as ObjectiveItem
+
+# ## Create trigger item (environmental effects)
+# static func create_trigger(trigger_id: String, spawn_position: Vector2 = Vector2.ZERO) -> TriggerItem:
+# 	var item = create_item_from_config(_load_item_config(trigger_id), spawn_position)
+# 	return item as TriggerItem
+
+## Smart factory method - creates appropriate type based on config
+static func create_item_by_type(item_id: String, item_type: ItemType, spawn_position: Vector2 = Vector2.ZERO) -> BaseItem:
+	match item_type:
+		ItemType.WEAPON:
+			return create_weapon(item_id, spawn_position)
+		# TODO: Implement after creating specialized item classes
+		# ItemType.CONSUMABLE:
+		# 	return create_consumable(item_id, spawn_position)
+		# ItemType.OBJECTIVE:
+		# 	return create_objective(item_id, spawn_position)
+		# ItemType.TRIGGER:
+		# 	return create_trigger(item_id, spawn_position)
+		ItemType.PROJECTILE:
+			# Projectiles need special handling with direction/velocity
+			return create_item_from_config(_load_item_config(item_id), spawn_position)
+		_:
+			Logger.warning("Unknown item type: " + str(item_type), "ItemFactory")
+			return create_item(item_id)
 
 # Simplified projectile creation using ItemConfig and object pooling
 static func create_projectile(projectile_id: String, launch_position: Vector2, direction: Vector2, owner_id: int = -1) -> BaseItem:

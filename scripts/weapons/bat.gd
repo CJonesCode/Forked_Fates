@@ -4,20 +4,20 @@ extends BaseWeapon
 ## Projectile-style bat melee weapon with swing mechanics
 ## Features knockback attacks and spinning throw projectiles
 
-# Swing properties
-@export var swing_range: float = 80.0
-@export var swing_angle: float = 120.0
-@export var swing_duration: float = 0.3
-@export var swing_recovery_time: float = 0.2
+# Configuration-loaded swing properties (replaces hard-coded @export values)
+var swing_range: float = 80.0
+var swing_angle: float = 120.0
+var swing_duration: float = 0.3
+var swing_recovery_time: float = 0.2
 
-# Knockback and damage properties
-@export var knockback_force: float = 300.0
-@export var swing_damage: int = 3
+# Configuration-loaded knockback and damage properties
+var knockback_force: float = 300.0
+var swing_damage: int = 3
 
-# Component references
-@onready var swing_area: Area2D = $SwingArea
-@onready var swing_collision: CollisionShape2D = $SwingArea/CollisionShape2D
-@onready var swing_audio: AudioStreamPlayer2D = $SwingAudio
+# Component references (optional - may not exist in scene)
+var swing_area: Area2D
+var swing_collision: CollisionShape2D
+var swing_audio: AudioStreamPlayer2D
 
 # Swing state
 var is_swinging: bool = false
@@ -27,8 +27,13 @@ var swing_targets: Array[BasePlayer] = []
 func _ready() -> void:
 	super()
 	
+	# Get optional component references
+	swing_area = get_node_or_null("SwingArea")
+	swing_collision = get_node_or_null("SwingArea/CollisionShape2D") if swing_area else null
+	swing_audio = get_node_or_null("SwingAudio")
+	
 	# Set weapon properties (projectile naming)
-	weapon_name = "Bat"
+	item_name = "Bat"
 	fire_rate = 1.2
 	base_damage = 3  # Higher melee damage for projectile feel
 	ammo_capacity = -1  # Infinite "ammo" for melee
@@ -38,7 +43,7 @@ func _ready() -> void:
 	can_ricochet = true
 	max_ricochets = 1
 	
-	# Setup swing area
+	# Setup swing area if it exists
 	if swing_area:
 		# Make sure swing area doesn't trigger initially
 		swing_area.set_deferred("monitoring", false)
@@ -226,8 +231,8 @@ func get_weapon_info() -> Dictionary:
 	return info
 
 ## Override throw behavior for enhanced bat projectiles
-func throw_weapon(direction: Vector2, force: float, thrower: BasePlayer) -> bool:
-	var can_throw = super.throw_weapon(direction, force, thrower)
+func throw_weapon(direction: Vector2, force: float, thrower_id: int) -> bool:
+	var can_throw = super.throw_weapon(direction, force, thrower_id)
 	
 	if can_throw:
 		# Projectile enhancement: Thrown bats spin and deal massive damage
@@ -239,4 +244,15 @@ func throw_weapon(direction: Vector2, force: float, thrower: BasePlayer) -> bool
 		# Enhance damage for thrown bat projectiles
 		throw_damage = int(base_damage * throw_damage_multiplier * 1.2)
 	
-	return can_throw 
+	return can_throw
+
+## Override to apply bat-specific configuration properties
+func _apply_weapon_config(config: ItemConfig) -> void:
+	super._apply_weapon_config(config)
+	
+	# Apply bat-specific properties from config
+	swing_range = config.swing_range
+	swing_damage = config.swing_damage
+	knockback_force = config.knockback_force
+	
+	Logger.system("Applied bat config: swing_damage=" + str(swing_damage) + ", knockback=" + str(knockback_force), "Bat") 

@@ -10,11 +10,8 @@ extends Node
 @export var max_items: int = 10
 @export var auto_respawn: bool = true
 
-# Projectile weapon scenes
-var weapon_scenes: Dictionary = {
-	"pistol": preload("res://scenes/weapons/pistol.tscn"),
-	"bat": preload("res://scenes/weapons/bat.tscn")
-}
+# Available weapon types (loaded from configs)
+var available_weapon_types: Array[String] = []
 
 # Spawn management
 var spawn_points: Array[Vector2] = []
@@ -23,12 +20,25 @@ var spawn_timer: float = 0.0
 var is_spawning: bool = false
 
 # Signals - projectile system style
-signal weapon_spawned(weapon: BaseWeapon)
-signal weapon_collected(weapon: BaseWeapon, player_id: int)
+signal weapon_spawned(weapon)
+signal weapon_collected(weapon, player_id: int)
 signal max_items_reached()
 
 func _ready() -> void:
-	Logger.system("ItemSpawner ready with projectile weapon system", "ItemSpawner")
+	_load_available_weapon_types()
+	Logger.system("ItemSpawner ready with factory-based weapon system", "ItemSpawner")
+
+## Load available weapon types from ConfigManager
+func _load_available_weapon_types() -> void:
+	available_weapon_types.clear()
+	var all_item_configs: Array[String] = ConfigManager.get_available_item_configs()
+	
+	for item_id in all_item_configs:
+		var config: ItemConfig = ConfigManager.get_item_config(item_id)
+		if config and config.item_type == ItemConfig.ItemType.WEAPON:
+			available_weapon_types.append(item_id)
+	
+	Logger.system("Loaded " + str(available_weapon_types.size()) + " weapon types: " + str(available_weapon_types), "ItemSpawner")
 
 ## Setup spawn points from positions array
 func setup_spawn_points(points: Array[Vector2]) -> void:
@@ -40,7 +50,7 @@ func spawn_initial_items() -> void:
 	Logger.game_flow("Spawning initial weapons", "ItemSpawner")
 	Logger.system("DEBUG: Available weapon spawn points: " + str(spawn_points.size()), "ItemSpawner")
 	Logger.system("DEBUG: Max weapons allowed: " + str(max_items), "ItemSpawner")
-	Logger.system("DEBUG: Available weapon types: " + str(weapon_scenes.keys()), "ItemSpawner")
+	Logger.system("DEBUG: Available weapon types: " + str(available_weapon_types), "ItemSpawner")
 	
 	var weapons_to_spawn = min(spawn_points.size(), max_items)
 	Logger.system("DEBUG: Will spawn " + str(weapons_to_spawn) + " weapons", "ItemSpawner")
@@ -65,25 +75,23 @@ func _process(delta: float) -> void:
 
 ## Spawn a specific weapon at a position
 func spawn_weapon(weapon_type: String, position: Vector2) -> BaseWeapon:
-	if not weapon_scenes.has(weapon_type):
-		Logger.warning("Unknown weapon type: " + weapon_type, "ItemSpawner")
+	var weapon: BaseWeapon = ItemFactory.create_item(weapon_type) as BaseWeapon
+	if not weapon:
+		Logger.error("Failed to create weapon: " + weapon_type, "ItemSpawner")
 		return null
 	
-	var weapon_scene: PackedScene = weapon_scenes[weapon_type]
-	var weapon_instance: BaseWeapon = weapon_scene.instantiate()
+	get_parent().add_child(weapon)
+	weapon.global_position = position
 	
-	get_parent().add_child(weapon_instance)
-	weapon_instance.global_position = position
-	
-	spawned_weapons.append(weapon_instance)
+	spawned_weapons.append(weapon)
 	
 	Logger.system("Spawned weapon " + weapon_type + " at " + str(position), "ItemSpawner")
-	weapon_spawned.emit(weapon_instance)
+	weapon_spawned.emit(weapon)
 	
 	if spawned_weapons.size() >= max_items:
 		max_items_reached.emit()
 	
-	return weapon_instance
+	return weapon
 
 ## Start automatic spawning
 func start_spawning() -> void:
@@ -107,8 +115,10 @@ func cleanup_items() -> void:
 
 ## Get random weapon type
 func _get_random_weapon_type() -> String:
-	var types: Array = weapon_scenes.keys()
-	return types[randi() % types.size()]
+	if available_weapon_types.is_empty():
+		Logger.warning("No weapon types available for spawning", "ItemSpawner")
+		return ""
+	return available_weapon_types[randi() % available_weapon_types.size()]
 
 ## Spawn random weapon at random position
 func _spawn_random_weapon() -> void:
@@ -116,6 +126,9 @@ func _spawn_random_weapon() -> void:
 		return
 	
 	var weapon_type: String = _get_random_weapon_type()
+	if weapon_type.is_empty():
+		return
+		
 	var position: Vector2 = spawn_points[randi() % spawn_points.size()]
 	spawn_weapon(weapon_type, position)
 
@@ -130,7 +143,8 @@ func get_spawn_statistics() -> Dictionary:
 		"total_weapons": spawned_weapons.size(),
 		"spawn_points_available": spawn_points.size(),
 		"max_items_limit": max_items,
-		"auto_respawn": auto_respawn
+		"auto_respawn": auto_respawn,
+		"available_weapon_types": available_weapon_types.size()
 	}
 
 ## Get all spawned weapons

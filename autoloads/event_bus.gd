@@ -39,6 +39,12 @@ signal item_picked_up(player_id: int, item_name: String)
 signal item_dropped(player_id: int, item_name: String)
 signal item_used(player_id: int, item_name: String)
 
+# Weapon communication signals (for event-driven component communication)
+signal weapon_position_requested(weapon_id: String, holder_id: int)
+signal weapon_position_provided(weapon_id: String, position: Vector2, rotation: float)
+signal weapon_facing_requested(weapon_id: String, holder_id: int)
+signal weapon_facing_provided(weapon_id: String, facing: int)
+
 # Minigame signals
 signal minigame_started(minigame_type: String)
 signal minigame_ended(winner_id: int, results: Dictionary)

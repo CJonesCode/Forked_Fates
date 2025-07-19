@@ -1,17 +1,28 @@
 [gd_resource type="Resource" format=3 load_steps=2]
 
-[ext_resource type="Script" path="res://configs/item_configs/item_config.gd" id="1_script"]
-[ext_resource type="PackedScene" path="res://scenes/items/pistol.tscn" id="2_scene"]
+[ext_resource type="Script" path="res://configs/item_configs/item_config.gd" id="item_config_script"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/pistol.tscn" id="pistol_scene"]
 
 [resource]
-script = ExtResource("1_script")
+script = ExtResource("item_config_script")
 item_id = "pistol"
 item_name = "Pistol"
 item_type = 0
-item_scene = ExtResource("2_scene")
-scene_path = "res://scenes/items/pistol.tscn"
+item_scene = ExtResource("pistol_scene")
+scene_path = "res://scenes/weapons/pistol.tscn"
 use_pooling = true
-damage_amount = 1
+damage_amount = 2
 use_duration = 0.5
 rarity = 2
-description = "A reliable sidearm that fires bullets" 
+description = "A reliable sidearm that fires bullets"
+fire_rate = 1.5
+ammo_capacity = 6
+bullet_speed = 800.0
+throw_damage_multiplier = 1.3
+max_throw_force = 600.0
+can_ricochet = false
+max_ricochets = 2
+recoil_force = 150.0
+spread_angle = 0.0
+bullets_per_shot = 1
+muzzle_flash_duration = 0.1 

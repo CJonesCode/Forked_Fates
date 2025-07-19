@@ -17,4 +17,24 @@ enum ItemType {
 @export var damage_amount: int = 0
 @export var use_duration: float = 0.0
 @export var rarity: int = 1
-@export var description: String = "" 
+@export var description: String = ""
+
+# Weapon-specific properties (only used when item_type == WEAPON)
+@export_group("Weapon Properties")
+@export var fire_rate: float = 1.0
+@export var ammo_capacity: int = -1  # -1 for infinite ammo
+@export var bullet_speed: float = 800.0
+@export var throw_damage_multiplier: float = 1.5
+@export var max_throw_force: float = 600.0
+@export var can_ricochet: bool = false
+@export var max_ricochets: int = 2
+@export var recoil_force: float = 150.0
+@export var spread_angle: float = 0.0
+@export var bullets_per_shot: int = 1
+@export var muzzle_flash_duration: float = 0.1
+
+# Melee weapon properties (for bat-style weapons)
+@export_group("Melee Properties")
+@export var swing_range: float = 80.0
+@export var swing_damage: int = 3
+@export var knockback_force: float = 300.0 

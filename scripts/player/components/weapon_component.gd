@@ -31,10 +31,22 @@ func _initialize_component() -> void:
 		weapon_hold_offset = player.game_config.item_hold_offset  # Reuse existing config
 		pickup_area_radius = player.game_config.pickup_area_radius
 	
+	# Connect to EventBus for weapon position requests
+	if not EventBus.weapon_position_requested.is_connected(_on_weapon_position_requested):
+		EventBus.weapon_position_requested.connect(_on_weapon_position_requested)
+	if not EventBus.weapon_facing_requested.is_connected(_on_weapon_facing_requested):
+		EventBus.weapon_facing_requested.connect(_on_weapon_facing_requested)
+	
 	# Create pickup area (async operation)
 	_create_pickup_area()
 
 func _cleanup_component() -> void:
+	# Disconnect EventBus signals
+	if EventBus.weapon_position_requested.is_connected(_on_weapon_position_requested):
+		EventBus.weapon_position_requested.disconnect(_on_weapon_position_requested)
+	if EventBus.weapon_facing_requested.is_connected(_on_weapon_facing_requested):
+		EventBus.weapon_facing_requested.disconnect(_on_weapon_facing_requested)
+	
 	# Clean up pickup area properly to prevent RID leaks
 	if pickup_area:
 		# Disconnect signals to prevent callbacks during cleanup
@@ -103,7 +115,7 @@ func fire_held_weapon() -> bool:
 	if fired_successfully:
 		weapon_fired.emit(weapon)
 		var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
-		Logger.combat(weapon.weapon_name + " fired by " + player_name, "WeaponComponent")
+		Logger.combat(weapon.item_name + " fired by " + player_name, "WeaponComponent")
 	
 	return fired_successfully
 
@@ -121,15 +133,15 @@ func throw_held_weapon(force: float = 0.0) -> bool:
 	# Calculate throw direction based on player movement and facing
 	var throw_direction: Vector2 = _calculate_throw_direction()
 	
-	Logger.combat(weapon.weapon_name + " being thrown by " + player_name + " with force " + str(throw_force), "WeaponComponent")
+	Logger.combat(weapon.item_name + " being thrown by " + player_name + " with force " + str(throw_force), "WeaponComponent")
 	
-	if weapon.throw_weapon(throw_direction, throw_force, player):
+	if weapon.throw_weapon(throw_direction, throw_force, player.player_data.player_id):
 		held_weapon = null
 		weapon_thrown.emit(weapon, throw_direction * throw_force)
-		Logger.combat(player_name + " threw " + weapon.weapon_name, "WeaponComponent")
+		Logger.combat(player_name + " threw " + weapon.item_name, "WeaponComponent")
 		return true
 	else:
-		Logger.warning(player_name + " failed to throw " + weapon.weapon_name, "WeaponComponent")
+		Logger.warning(player_name + " failed to throw " + weapon.item_name, "WeaponComponent")
 		return false
 
 ## Attempt to pick up the nearest available weapon (projectile system core action)
@@ -154,7 +166,7 @@ func pickup_nearest_weapon() -> bool:
 	
 	# Try to pick up the nearest weapon
 	if nearest_weapon:
-		Logger.pickup("Picking up nearest weapon: " + nearest_weapon.weapon_name + " (distance: " + str(nearest_distance) + ")", "WeaponComponent")
+		Logger.pickup("Picking up nearest weapon: " + nearest_weapon.item_name + " (distance: " + str(nearest_distance) + ")", "WeaponComponent")
 		return try_pickup_weapon(nearest_weapon)
 	else:
 		Logger.pickup("No pickupable weapons found", "WeaponComponent")
@@ -164,13 +176,13 @@ func pickup_nearest_weapon() -> bool:
 ## Attempt to pick up a specific weapon
 func try_pickup_weapon(weapon: BaseWeapon) -> bool:
 	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
-	Logger.pickup(player_name + " attempting to pickup " + weapon.weapon_name, "WeaponComponent")
+	Logger.pickup(player_name + " attempting to pickup " + weapon.item_name, "WeaponComponent")
 	
 	if not can_pickup or held_weapon != null:
 		Logger.pickup("Pickup failed - cannot pickup or already holding weapon", "WeaponComponent")
 		return false
 	
-	if weapon and weapon.pickup_weapon(player):
+	if weapon and weapon.pickup_by_id(player.player_data.player_id):
 		held_weapon = weapon
 		weapon_picked_up.emit(weapon)
 		
@@ -179,10 +191,10 @@ func try_pickup_weapon(weapon: BaseWeapon) -> bool:
 			nearby_weapons.erase(weapon)
 			nearby_weapons_changed.emit(nearby_weapons)
 		
-		Logger.pickup(player_name + " picked up " + weapon.weapon_name, "WeaponComponent")
+		Logger.pickup(player_name + " picked up " + weapon.item_name, "WeaponComponent")
 		return true
 	else:
-		Logger.pickup("weapon.pickup_weapon() failed for " + (weapon.weapon_name if weapon else "null weapon"), "WeaponComponent")
+		Logger.pickup("weapon.pickup_by_id() failed for " + (weapon.item_name if weapon else "null weapon"), "WeaponComponent")
 	
 	return false
 
@@ -242,13 +254,13 @@ func force_throw_weapon(impulse_velocity: Vector2 = Vector2.ZERO) -> void:
 	
 	var weapon: BaseWeapon = held_weapon
 	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
-	Logger.combat(weapon.weapon_name + " force thrown by " + player_name, "WeaponComponent")
+	Logger.combat(weapon.item_name + " force thrown by " + player_name, "WeaponComponent")
 	
 	# Calculate throw direction from impulse
 	var throw_direction: Vector2 = impulse_velocity.normalized() if impulse_velocity.length() > 0.1 else Vector2.RIGHT
 	var throw_force: float = impulse_velocity.length() if impulse_velocity.length() > 100.0 else default_throw_force
 	
-	if weapon.throw_weapon(throw_direction, throw_force, player):
+	if weapon.throw_weapon(throw_direction, throw_force, player.player_data.player_id):
 		held_weapon = null
 		weapon_thrown.emit(weapon, impulse_velocity)
 
@@ -259,14 +271,14 @@ func _on_pickup_area_entered(body: Node2D) -> void:
 	
 	if body is BaseWeapon:
 		var weapon: BaseWeapon = body as BaseWeapon
-		Logger.pickup(player_name + " detected weapon: " + weapon.weapon_name + " (can_pickup: " + str(weapon.can_be_picked_up) + ", is_held: " + str(weapon.is_held) + ")", "WeaponComponent")
+		Logger.pickup(player_name + " detected weapon: " + weapon.item_name + " (can_pickup: " + str(weapon.can_be_picked_up) + ", is_held: " + str(weapon.is_held) + ")", "WeaponComponent")
 		
 		if weapon.can_be_picked_up and not weapon.is_held and weapon not in nearby_weapons:
 			nearby_weapons.append(weapon)
 			nearby_weapons_changed.emit(nearby_weapons)
-			Logger.pickup(player_name + " can now pickup: " + weapon.weapon_name + " (total nearby: " + str(nearby_weapons.size()) + ")", "WeaponComponent")
+			Logger.pickup(player_name + " can now pickup: " + weapon.item_name + " (total nearby: " + str(nearby_weapons.size()) + ")", "WeaponComponent")
 		else:
-			Logger.pickup(player_name + " cannot pickup " + weapon.weapon_name + " - already in nearby list or not available", "WeaponComponent")
+			Logger.pickup(player_name + " cannot pickup " + weapon.item_name + " - already in nearby list or not available", "WeaponComponent")
 	else:
 		Logger.pickup(player_name + " detected non-weapon body: " + body.name + " (projectile weapons only)", "WeaponComponent")
 
@@ -279,6 +291,28 @@ func _on_pickup_area_exited(body: Node2D) -> void:
 		if weapon in nearby_weapons:
 			nearby_weapons.erase(weapon)
 			nearby_weapons_changed.emit(nearby_weapons)
-			Logger.pickup(player_name + " lost pickup range for: " + weapon.weapon_name + " (total nearby: " + str(nearby_weapons.size()) + ")", "WeaponComponent")
+			Logger.pickup(player_name + " lost pickup range for: " + weapon.item_name + " (total nearby: " + str(nearby_weapons.size()) + ")", "WeaponComponent")
 		else:
-			Logger.pickup(player_name + " lost " + weapon.weapon_name + " but it wasn't in nearby list", "WeaponComponent") 
+			Logger.pickup(player_name + " lost " + weapon.item_name + " but it wasn't in nearby list", "WeaponComponent")
+
+## Event handler for weapon position requests from BaseWeapon
+func _on_weapon_position_requested(weapon_id: String, holder_id: int) -> void:
+	# Only respond if this request is for our player and we have a held weapon
+	if not player.player_data or player.player_data.player_id != holder_id:
+		return
+	
+	if held_weapon and held_weapon.item_name == weapon_id:
+		var position: Vector2 = get_weapon_hold_position()
+		var rotation_angle: float = 0.0  # Base rotation, facing will be applied separately
+		EventBus.weapon_position_provided.emit(weapon_id, position, rotation_angle)
+
+## Event handler for weapon facing requests from BaseWeapon
+func _on_weapon_facing_requested(weapon_id: String, holder_id: int) -> void:
+	# Only respond if this request is for our player and we have a held weapon
+	if not player.player_data or player.player_data.player_id != holder_id:
+		return
+	
+	if held_weapon and held_weapon.item_name == weapon_id:
+		var movement_component: MovementComponent = player.get_component(MovementComponent)
+		var facing_direction: int = movement_component.facing_direction if movement_component else 1
+		EventBus.weapon_facing_provided.emit(weapon_id, facing_direction) 

@@ -16,10 +16,10 @@ extends Node
 @onready var ui_layer: CanvasLayer = $UILayer
 @onready var scene_container: Node = $SceneContainer
 
-# Preload common scenes for better performance
-var main_menu_scene: PackedScene = preload("res://scenes/ui/main_menu.tscn")
-var map_view_scene: PackedScene = preload("res://scenes/ui/map_view.tscn")
-var sudden_death_minigame_scene: PackedScene = preload("res://scenes/minigames/sudden_death_minigame.tscn")
+# Scene cache for lazy loading
+var main_menu_scene: PackedScene
+var map_view_scene: PackedScene  
+var sudden_death_minigame_scene: PackedScene
 
 func _ready() -> void:
 	# Connect to EventBus for scene transitions
@@ -57,7 +57,9 @@ func _force_cleanup_all_resources() -> void:
 	Logger.system("Forced cleanup completed", "Main")
 
 func _load_initial_scene() -> void:
-	# Load the main menu as the first scene
+	# Load the main menu as the first scene with lazy loading
+	if not main_menu_scene:
+		main_menu_scene = load("res://scenes/ui/main_menu.tscn")
 	var main_menu_instance: Node = main_menu_scene.instantiate()
 	scene_container.add_child(main_menu_instance)
 	
@@ -71,18 +73,26 @@ func _on_scene_transition_requested(scene_path: String) -> void:
 	for child in scene_container.get_children():
 		child.queue_free()
 	
-	# Load new scene - try preloaded scenes first for better performance
+	# Load new scene with lazy loading
 	var scene_instance: Node = null
 	
 	match scene_path:
 		"res://scenes/ui/main_menu.tscn":
+			if not main_menu_scene:
+				main_menu_scene = load("res://scenes/ui/main_menu.tscn")
 			scene_instance = main_menu_scene.instantiate()
 		"res://scenes/ui/map_view.tscn":
+			if not map_view_scene:
+				map_view_scene = load("res://scenes/ui/map_view.tscn")
 			scene_instance = map_view_scene.instantiate()
 		"res://scenes/minigames/sudden_death_minigame.tscn":
+			if not sudden_death_minigame_scene:
+				sudden_death_minigame_scene = load("res://scenes/minigames/sudden_death_minigame.tscn")
 			scene_instance = sudden_death_minigame_scene.instantiate()
 		# Remove the container reference
 		"minigame:sudden_death":  # Support direct minigame requests
+			if not sudden_death_minigame_scene:
+				sudden_death_minigame_scene = load("res://scenes/minigames/sudden_death_minigame.tscn")
 			scene_instance = sudden_death_minigame_scene.instantiate()
 		_:
 			# Fallback to load() for other scenes

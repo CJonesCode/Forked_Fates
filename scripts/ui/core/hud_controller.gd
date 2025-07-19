@@ -21,7 +21,9 @@ func show_player_hud(players: Array[PlayerData]) -> void:
 	hide_player_hud()
 	
 	# Create new player HUD
-	var player_hud_scene: PackedScene = preload("res://scenes/ui/player_hud.tscn")
+	var player_hud_scene: PackedScene  # Lazy loaded when needed
+	if not player_hud_scene:
+		player_hud_scene = load("res://scenes/ui/player_hud.tscn")  # Lazy loading
 	current_player_hud = player_hud_scene.instantiate()
 	
 	# Add to scene tree

@@ -125,8 +125,8 @@ func _on_physics_start() -> void:
 	EventBus.round_started.emit()
 
 ## Projectile weapon system integration
-func _on_physics_weapon_spawned(weapon: BaseWeapon) -> void:
-	Logger.combat("Projectile weapon spawned: " + weapon.weapon_name + " in Sudden Death arena", "SuddenDeathMinigame")
+func _on_physics_weapon_spawned(weapon) -> void:
+	Logger.combat("Projectile weapon spawned: " + weapon.item_name + " in Sudden Death arena", "SuddenDeathMinigame")
 	
 	# Could add weapon-specific effects here
 	# e.g., highlight powerful weapons, add spawn effects, etc.

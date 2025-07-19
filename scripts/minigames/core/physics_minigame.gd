@@ -27,7 +27,7 @@ var item_spawn_points: Node2D = null
 # Physics minigame signals
 signal player_spawned(player: BasePlayer)
 signal player_eliminated(player_id: int)
-signal weapon_spawned(weapon: BaseWeapon)
+signal weapon_spawned(weapon)
 signal round_started()
 signal round_ended()
 
@@ -243,8 +243,8 @@ func _on_player_spawned(player: BasePlayer) -> void:
 	_on_physics_player_spawned(player)
 
 ## Handle weapon spawning
-func _on_weapon_spawned(weapon: BaseWeapon) -> void:
-	Logger.system("Weapon spawned: " + weapon.weapon_name, "PhysicsMinigame")
+func _on_weapon_spawned(weapon) -> void:
+	Logger.system("Weapon spawned: " + weapon.item_name, "PhysicsMinigame")
 	weapon_spawned.emit(weapon)
 	
 	# Hook for subclass weapon spawn handling
@@ -322,7 +322,7 @@ func _on_physics_player_spawned(player: BasePlayer) -> void:
 	pass
 
 ## Called when a weapon spawns
-func _on_physics_weapon_spawned(weapon: BaseWeapon) -> void:
+func _on_physics_weapon_spawned(weapon) -> void:
 	pass
 
 ## Called when a player respawns
