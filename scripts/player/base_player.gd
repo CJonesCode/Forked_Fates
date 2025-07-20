@@ -218,9 +218,9 @@ func respawn() -> void:
 	global_position = spawn_position
 	velocity = Vector2.ZERO
 	
-	# Restore visual state
+	# Restore visual state - full transparency, white color, no rotation
 	visible = true
-	modulate = Color.WHITE
+	modulate = Color(1.0, 1.0, 1.0, 1.0)  # Full white with full transparency
 	rotation = 0.0
 	
 	# Emit respawn events

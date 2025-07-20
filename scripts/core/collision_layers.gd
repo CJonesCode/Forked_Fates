@@ -84,7 +84,7 @@ static func setup_player(player: CharacterBody2D) -> void:
 ## Setup ragdoll collision (physics body state)
 static func setup_ragdoll(ragdoll: RigidBody2D) -> void:
 	set_layer(ragdoll, Layer.PLAYERS)
-	set_mask(ragdoll, Mask.ENVIRONMENT_ONLY)  # Only collide with environment, not other players
+	set_mask(ragdoll, Mask.PLAYERS_AND_ENVIRONMENT)  # Collide with environment AND other players/ragdolls
 
 ## Setup item collision (world state)
 static func setup_item(item: RigidBody2D) -> void:

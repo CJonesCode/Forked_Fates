@@ -10,7 +10,7 @@ signal ragdoll_exited()
 signal ragdoll_impact(force: Vector2)
 
 # Ragdoll properties
-@export var ragdoll_force_threshold: float = 500.0
+@export var ragdoll_force_threshold: float = 800.0
 @export var ragdoll_recovery_time: float = 2.0
 @export var ragdoll_gravity_scale: float = 1.0
 @export var ragdoll_mass: float = 2.0
@@ -66,6 +66,11 @@ func enter_ragdoll_state(disable_auto_recovery: bool = false) -> void:
 	# Store position for recovery
 	pre_ragdoll_position = player.global_position
 	
+	# Disable collision on original player to prevent self-collision with ragdoll body
+	player.set_collision_layer_value(2, false)  # Disable PLAYERS layer (bit position 2)
+	player.set_collision_mask_value(1, false)   # Disable ENVIRONMENT collision (bit position 1)
+	player.set_collision_mask_value(2, false)   # Disable PLAYERS collision (bit position 2)
+	
 	# Disable player input and pickup
 	var input_component: InputComponent = player.get_component(InputComponent)
 	if input_component:
@@ -84,12 +89,12 @@ func enter_ragdoll_state(disable_auto_recovery: bool = false) -> void:
 	# Create ragdoll physics body (deferred to avoid physics conflicts)
 	call_deferred("_create_ragdoll_body")
 	
-	# Hide original player body
-	player.visible = false
+	# Use transparency instead of hiding - half transparent for ragdoll
+	player.modulate.a = 0.5
 	
 	ragdoll_entered.emit()
 	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
-	Logger.player(player_name, "entered ragdoll state", "RagdollComponent")
+	Logger.player(player_name, "entered ragdoll state with half transparency", "RagdollComponent")
 
 ## Exit ragdoll state
 func exit_ragdoll_state() -> void:
@@ -102,6 +107,11 @@ func exit_ragdoll_state() -> void:
 	if ragdoll_body:
 		player.global_position = ragdoll_body.global_position
 		player.velocity = ragdoll_body.linear_velocity * 0.3  # Dampen velocity on recovery
+	
+	# Restore collision on original player
+	player.set_collision_layer_value(2, true)  # Restore PLAYERS layer (bit position 2)
+	player.set_collision_mask_value(1, true)   # Restore ENVIRONMENT collision (bit position 1)
+	player.set_collision_mask_value(2, true)   # Restore PLAYERS collision (bit position 2)
 	
 	# Re-enable player systems
 	var input_component: InputComponent = player.get_component(InputComponent)
@@ -116,21 +126,20 @@ func exit_ragdoll_state() -> void:
 	# Clean up ragdoll body
 	_remove_ragdoll_body()
 	
-	# Restore visual state
-	player.visible = true
+	# Restore visual state - full transparency and no rotation
+	player.modulate.a = 1.0
 	player.rotation = 0.0
-	player.modulate = Color.WHITE
 	
 	ragdoll_exited.emit()
 	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
-	Logger.player(player_name, "recovered from ragdoll", "RagdollComponent")
+	Logger.player(player_name, "recovered from ragdoll with full transparency", "RagdollComponent")
 
 ## Create ragdoll physics body
 func _create_ragdoll_body() -> void:
 	if ragdoll_body:
 		return
 	
-	# Create a RigidBody2D with tipping-friendly physics
+	# Create a RigidBody2D with tipping-friendly physics (physics only, no visuals)
 	ragdoll_body = RigidBody2D.new()
 	ragdoll_body.gravity_scale = ragdoll_gravity_scale
 	ragdoll_body.mass = ragdoll_mass
@@ -160,33 +169,8 @@ func _create_ragdoll_body() -> void:
 	ragdoll_collision.position.y = -5  # Move collision up for higher center of gravity
 	ragdoll_body.add_child(ragdoll_collision)
 	
-	# Copy sprite appearance - create capsule-like visual to match player
-	var ragdoll_sprite: Sprite2D = Sprite2D.new()
-	var ragdoll_capsule: Node2D = Node2D.new()
-	
-	# Create capsule body (main rectangle)
-	var ragdoll_body_rect: ColorRect = ColorRect.new()
-	ragdoll_body_rect.size = Vector2(20, 20)
-	ragdoll_body_rect.position = Vector2(-10, -10)  # Centered
-	ragdoll_body_rect.color = Color(1.0, 0.6, 0.6, 1.0)  # Reddish tint for ragdoll state
-	ragdoll_capsule.add_child(ragdoll_body_rect)
-	
-	# Create top cap (narrower)
-	var ragdoll_top_cap: ColorRect = ColorRect.new()
-	ragdoll_top_cap.size = Vector2(14, 7)
-	ragdoll_top_cap.position = Vector2(-7, -17)  # Centered above body
-	ragdoll_top_cap.color = Color(1.0, 0.6, 0.6, 1.0)  # Same reddish tint
-	ragdoll_capsule.add_child(ragdoll_top_cap)
-	
-	# Create bottom cap (narrower)
-	var ragdoll_bottom_cap: ColorRect = ColorRect.new()
-	ragdoll_bottom_cap.size = Vector2(14, 7)
-	ragdoll_bottom_cap.position = Vector2(-7, 10)  # Centered below body
-	ragdoll_bottom_cap.color = Color(1.0, 0.6, 0.6, 1.0)  # Same reddish tint
-	ragdoll_capsule.add_child(ragdoll_bottom_cap)
-	
-	ragdoll_sprite.add_child(ragdoll_capsule)
-	ragdoll_body.add_child(ragdoll_sprite)
+	# No visual components needed - player remains visible with transparency
+	# The original player sprite shows the ragdoll state visually
 	
 	# Add to scene
 	player.get_parent().add_child(ragdoll_body)
@@ -209,7 +193,7 @@ func _create_ragdoll_body() -> void:
 	_apply_tipping_force()
 	
 	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
-	Logger.debug("Created ragdoll body for " + player_name, "RagdollComponent")
+	Logger.debug("Created physics-only ragdoll body for " + player_name, "RagdollComponent")
 
 ## Apply tipping force to ragdoll body
 func _apply_tipping_force() -> void:
@@ -248,12 +232,11 @@ func _remove_ragdoll_body() -> void:
 func enter_death_ragdoll() -> void:
 	enter_ragdoll_state(true)  # Disable auto recovery
 	
-	# Make death ragdoll visually distinct
-	if ragdoll_body:
-		ragdoll_body.modulate = Color(0.8, 0.3, 0.3, 1.0)  # Reddish tint for death
+	# Make death ragdoll more transparent than regular ragdoll
+	player.modulate.a = 0.3
 	
 	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
-	Logger.player(player_name, "entered death ragdoll state", "RagdollComponent")
+	Logger.player(player_name, "entered death ragdoll state with low transparency", "RagdollComponent")
 
 ## Cleanup ragdoll state completely
 func cleanup_ragdoll_state() -> void:
@@ -278,6 +261,11 @@ func cleanup_ragdoll_state() -> void:
 		ragdoll_body.queue_free()
 		ragdoll_body = null
 	
+	# Restore collision on original player
+	player.set_collision_layer_value(2, true)  # Restore PLAYERS layer (bit position 2)
+	player.set_collision_mask_value(1, true)   # Restore ENVIRONMENT collision (bit position 1)
+	player.set_collision_mask_value(2, true)   # Restore PLAYERS collision (bit position 2)
+	
 	# Re-enable systems
 	var input_component: InputComponent = player.get_component(InputComponent)
 	if input_component:
@@ -288,8 +276,8 @@ func cleanup_ragdoll_state() -> void:
 	if item_component:
 		item_component.set_pickup_enabled(true)
 	
-	# Ensure player is visible
-	player.visible = true
+	# Restore full transparency
+	player.modulate.a = 1.0
 	
 	is_ragdolled = false
 

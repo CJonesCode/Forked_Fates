@@ -92,11 +92,11 @@ func _on_player_died(player_id: int) -> void:
 	Logger.system("Available respawn points: " + str(respawn_points.size()), "RespawnManager")
 	dead_players[player_id] = respawn_delay
 	
-	# Make player invisible during respawn countdown
+	# Make player half transparent during respawn countdown instead of invisible
 	var player: BasePlayer = _get_player_by_id(player_id)
 	if player:
-		player.visible = false
-		Logger.system("Player " + str(player_id) + " found and made invisible for respawn countdown", "RespawnManager")
+		player.modulate.a = 0.5
+		Logger.system("Player " + str(player_id) + " found and made half transparent for respawn countdown", "RespawnManager")
 	else:
 		Logger.warning("Player " + str(player_id) + " not found for respawn countdown!", "RespawnManager")
 
