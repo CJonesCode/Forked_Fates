@@ -290,6 +290,15 @@ func _restore_collision_layers() -> void:
 	CollisionLayers.add_layer(self, CollisionLayers.Layer.ITEMS)
 	CollisionLayers.add_mask(self, CollisionLayers.Mask.ITEMS_INTERACTION)
 
+## Reattach to scene safely (called deferred to avoid physics flush conflicts)
+func _reattach_to_scene(scene_root: Node, world_pos: Vector2) -> void:
+	scene_root.add_child(self)
+	Logger.debug("Added to scene root: " + scene_root.name, "BaseItem")
+	
+	# Restore world position
+	global_position = world_pos
+	Logger.debug("Final world position: " + str(global_position), "BaseItem")
+
 ## Detach item from player
 func _detach_from_player() -> void:
 	if not holder:
@@ -310,14 +319,9 @@ func _detach_from_player() -> void:
 	temp_holder.remove_child(self)
 	Logger.debug("Removed from player", "BaseItem")
 	
-	# Add back to scene tree using stored reference
+	# Defer re-adding to scene tree to avoid physics conflicts
 	var scene_root = scene_tree.current_scene
-	scene_root.add_child(self)
-	Logger.debug("Added to scene root: " + scene_root.name, "BaseItem")
-	
-	# Restore world position
-	global_position = world_pos
-	Logger.debug("Final world position: " + str(global_position), "BaseItem")
+	call_deferred("_reattach_to_scene", scene_root, world_pos)
 
 ## Get item info for UI display
 func get_item_info() -> Dictionary:

@@ -326,7 +326,8 @@ func throw_weapon(direction: Vector2, force: float, thrower_id: int) -> bool:
 	# Release from holder (shared logic)
 	is_held = false
 	holder = null
-	freeze = false
+	# Defer physics mode change to avoid conflicts during physics processing
+	call_deferred("_unfreeze_weapon")
 	
 	# Set pickup cooldown timer to prevent immediate re-pickup
 	last_use_time = Time.get_unix_time_from_system()
@@ -521,6 +522,10 @@ func _stop_thrown_weapon() -> void:
 	CollisionLayers.setup_item(self)
 	
 	Logger.debug("Thrown weapon stopped and returned to item state", "BaseWeapon")
+
+## Unfreeze weapon safely (called deferred to avoid physics flush conflicts)
+func _unfreeze_weapon() -> void:
+	freeze = false
 
 ## Cleanup on exit
 func _exit_tree() -> void:
