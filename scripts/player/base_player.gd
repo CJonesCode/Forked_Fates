@@ -46,6 +46,9 @@ func _ready() -> void:
 	# Load game configuration
 	game_config = GameConfig.get_instance()
 	
+	# Set collision layers for player (always run this regardless of player_data)
+	CollisionLayers.setup_player(self)
+	
 	# Initialize default player data if not assigned
 	if not player_data:
 		player_data = PlayerData.new(0, "Player")
@@ -53,9 +56,6 @@ func _ready() -> void:
 		return
 	else:
 		Logger.system("BasePlayer using assigned PlayerData: " + player_data.player_name + " (ID: " + str(player_data.player_id) + ")", "BasePlayer")
-	
-	# Set collision layers for player
-	CollisionLayers.setup_player(self)
 	
 	# Setup components
 	_setup_components()
@@ -105,6 +105,7 @@ func _connect_component_signals() -> void:
 		movement.facing_changed.connect(_on_facing_changed)
 		movement.landed.connect(_on_movement_landed)
 		movement.jumped.connect(_on_movement_jumped)
+		movement.player_hit_in_head.connect(_on_movement_player_hit_in_head)
 	
 	# Universal item component signals
 	if item:
@@ -378,6 +379,10 @@ func _on_movement_landed() -> void:
 
 func _on_movement_jumped() -> void:
 	Logger.debug(player_data.player_name + " jumped", "BasePlayer")
+
+func _on_movement_player_hit_in_head(other_player: BasePlayer) -> void:
+	var other_name: String = other_player.player_data.player_name if other_player.player_data else "Unknown Player"
+	Logger.debug(player_data.player_name + " was hit in the head by " + other_name, "BasePlayer")
 
 ## Universal item component signal handlers
 func _on_item_picked_up(item_obj: BaseItem) -> void:

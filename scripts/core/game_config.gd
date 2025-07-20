@@ -52,6 +52,24 @@ static func get_instance() -> GameConfig:
 		_setup_default_values(instance)
 	return instance
 
+## Generate a simple fallback texture - half purple, half black square
+static func create_fallback_texture(size: int = 32) -> ImageTexture:
+	var image = Image.create(size, size, false, Image.FORMAT_RGB8)
+	
+	# Fill top half with purple
+	for y in range(size / 2):
+		for x in range(size):
+			image.set_pixel(x, y, Color.PURPLE)
+	
+	# Fill bottom half with black
+	for y in range(size / 2, size):
+		for x in range(size):
+			image.set_pixel(x, y, Color.BLACK)
+	
+	var texture = ImageTexture.new()
+	texture.set_image(image)
+	return texture
+
 ## Setup default values for the configuration
 static func _setup_default_values(config: GameConfig) -> void:
 	# Values are already set via @export defaults above

@@ -32,6 +32,7 @@ signal player_killed_by(victim_id: int, killer_id: int, source_name: String)  # 
 signal player_respawned(player_id: int)
 signal player_ragdolled(player_id: int)
 signal player_recovered(player_id: int)
+signal player_landed_on_player(lander_id: int, victim_id: int)  # New: player landing on another player
 signal player_respawn_timer_updated(player_id: int, time_remaining: float)
 signal player_damage_reported(victim_id: int, attacker_id: int, damage: int, source_name: String)  # Updated: source_name
 
@@ -222,6 +223,10 @@ func emit_player_respawned(player_id: int) -> void:
 ## Emit a respawn timer update
 func emit_player_respawn_timer_updated(player_id: int, time_remaining: float) -> void:
 	player_respawn_timer_updated.emit(player_id, time_remaining)
+
+## Emit a player landed on another player event
+func emit_player_landed_on_player(lander_id: int, victim_id: int) -> void:
+	player_landed_on_player.emit(lander_id, victim_id)
 
 ## Report damage dealt to a player (for minigame to handle)
 func report_player_damage(victim_id: int, attacker_id: int, damage: int, source_name: String) -> void:

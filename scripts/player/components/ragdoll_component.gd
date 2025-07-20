@@ -46,9 +46,10 @@ func _check_for_ragdoll_conditions() -> void:
 func _handle_ragdoll_physics(delta: float) -> void:
 	ragdoll_timer += delta
 	
-	# Sync position with ragdoll body
+	# Sync position AND rotation with ragdoll body
 	if ragdoll_body:
 		player.global_position = ragdoll_body.global_position
+		player.rotation = ragdoll_body.rotation  # Sync rotation too!
 	
 	# Check for auto recovery
 	if auto_recovery_enabled and ragdoll_timer >= ragdoll_recovery_time:
@@ -175,6 +176,7 @@ func _create_ragdoll_body() -> void:
 	# Add to scene
 	player.get_parent().add_child(ragdoll_body)
 	ragdoll_body.global_position = player.global_position
+	ragdoll_body.rotation = player.rotation  # Sync initial rotation
 	
 	# Apply initial velocity with clamping to prevent excessive bouncing
 	var clamped_velocity: Vector2 = player.velocity
@@ -200,25 +202,29 @@ func _apply_tipping_force() -> void:
 	if not ragdoll_body:
 		return
 	
-	# Calculate tipping force based on movement and impacts
-	var base_tipping_force: Vector2 = Vector2(0, -50)  # Small upward force at top
+	# Calculate tipping force based on movement and impacts - more dramatic base values!
+	var base_tipping_force: Vector2 = Vector2(0, -120)  # Much stronger upward force for better chaos
 	
 	# Add directional tipping based on player movement
 	var movement_component: MovementComponent = player.get_component(MovementComponent)
 	if movement_component and movement_component.input_vector.x != 0:
-		base_tipping_force.x += movement_component.input_vector.x * 30.0
+		base_tipping_force.x += movement_component.input_vector.x * 60.0  # Doubled for more dramatic effect
 	
 	# Add impact-based tipping if moving fast
 	if player.velocity.length() > 200.0:
-		base_tipping_force.x += randf_range(-50.0, 50.0)  # Extra random horizontal force
-		base_tipping_force.y -= randf_range(20.0, 40.0)   # Extra upward force for impacts
+		base_tipping_force.x += randf_range(-100.0, 100.0)  # Doubled random horizontal force
+		base_tipping_force.y -= randf_range(40.0, 80.0)   # Doubled upward force for impacts
+	
+	# Add some random chaos to all ragdolls for Mario Party style
+	base_tipping_force.x += randf_range(-30.0, 30.0)  # Random horizontal chaos
+	base_tipping_force.y -= randf_range(10.0, 30.0)   # Random extra upward force
 	
 	# Apply the force at the top of the sprite (20 pixels up from center)
 	var top_offset: Vector2 = Vector2(0, -20)
 	ragdoll_body.apply_impulse(base_tipping_force, top_offset)
 	
 	ragdoll_impact.emit(base_tipping_force)
-	Logger.debug("Applied tipping force " + str(base_tipping_force) + " at offset " + str(top_offset), "RagdollComponent")
+	Logger.debug("Applied enhanced tipping force " + str(base_tipping_force) + " at offset " + str(top_offset), "RagdollComponent")
 
 ## Remove ragdoll physics body
 func _remove_ragdoll_body() -> void:
@@ -237,6 +243,52 @@ func enter_death_ragdoll() -> void:
 	
 	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
 	Logger.player(player_name, "entered death ragdoll state with low transparency", "RagdollComponent")
+
+## Force enter ragdoll from head collision with dramatic force
+func enter_head_collision_ragdoll(impact_direction: Vector2 = Vector2.ZERO) -> void:
+	enter_ragdoll_state()  # Enable auto recovery for head collisions
+	
+	# Wait for ragdoll body to be created, then apply dramatic force
+	await get_tree().process_frame
+	await get_tree().process_frame
+	
+	if ragdoll_body:
+		_apply_head_collision_force(impact_direction)
+	
+	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
+	Logger.combat(player_name + " entered HEAD COLLISION ragdoll with dramatic force!", "RagdollComponent")
+
+## Apply dramatic force for head collision ragdolls
+func _apply_head_collision_force(impact_direction: Vector2) -> void:
+	if not ragdoll_body:
+		return
+	
+	# Much more dramatic force for head collisions - Mario Party style!
+	var head_collision_force: Vector2 = Vector2(0, -200)  # Strong upward force
+	
+	# Add random horizontal chaos
+	head_collision_force.x += randf_range(-150.0, 150.0)  # Random horizontal spin
+	head_collision_force.y -= randf_range(50.0, 100.0)   # Extra random upward boost
+	
+	# If we have impact direction info, use it for more realistic physics
+	if impact_direction.length() > 0:
+		var normalized_impact: Vector2 = impact_direction.normalized()
+		head_collision_force.x += normalized_impact.x * 100.0  # Push in impact direction
+		head_collision_force.y -= abs(normalized_impact.y) * 75.0  # Extra upward force
+	
+	# Apply the force at multiple points for more dramatic spinning
+	var top_offset: Vector2 = Vector2(0, -20)
+	var side_offset: Vector2 = Vector2(randf_range(-15.0, 15.0), 0)
+	
+	# Main dramatic force at the top
+	ragdoll_body.apply_impulse(head_collision_force, top_offset)
+	
+	# Additional spinning force at the side
+	var spin_force: Vector2 = Vector2(randf_range(-75.0, 75.0), randf_range(-25.0, 25.0))
+	ragdoll_body.apply_impulse(spin_force, side_offset)
+	
+	ragdoll_impact.emit(head_collision_force)
+	Logger.combat("Applied DRAMATIC head collision force: " + str(head_collision_force) + " + spin: " + str(spin_force), "RagdollComponent")
 
 ## Cleanup ragdoll state completely
 func cleanup_ragdoll_state() -> void:
