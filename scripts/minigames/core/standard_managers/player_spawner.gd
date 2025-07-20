@@ -203,21 +203,34 @@ func _apply_player_color(player: BasePlayer, player_id: int) -> void:
 	Logger.system("DEBUG: Applying color " + str(player_color) + " to player " + str(player_id) + " (" + player.player_data.player_name + ")", "PlayerSpawner")
 	Logger.system("DEBUG: PlayerSprite node type: " + player_sprite.get_class(), "PlayerSpawner")
 	
-	# ColorRect uses the 'color' property directly
+	# Handle different PlayerSprite structures
 	if player_sprite is ColorRect:
+		# Legacy single ColorRect structure
 		var color_rect: ColorRect = player_sprite as ColorRect
 		color_rect.color = player_color
 		Logger.system("Applied color " + str(player_color) + " via ColorRect.color to player " + str(player_id), "PlayerSpawner")
+	elif player_sprite is Node2D:
+		# New capsule structure with multiple ColorRect children
+		var components_colored: int = 0
+		
+		# Apply color to all ColorRect children (CapsuleBody, TopCap, BottomCap)
+		for child in player_sprite.get_children():
+			if child is ColorRect:
+				var color_rect: ColorRect = child as ColorRect
+				color_rect.color = player_color
+				components_colored += 1
+		
+		if components_colored > 0:
+			Logger.system("Applied color " + str(player_color) + " to " + str(components_colored) + " capsule components for player " + str(player_id), "PlayerSpawner")
+		else:
+			Logger.warning("PlayerSprite Node2D has no ColorRect children to color", "PlayerSpawner")
 	else:
-		# Fallback for other node types
-		if player_sprite.has_property("color"):
-			player_sprite.color = player_color
-			Logger.system("Applied color via color property", "PlayerSpawner")
-		elif player_sprite.has_property("modulate"):
+		# Fallback for other node types using modulate
+		if player_sprite.has_method("set"):
 			player_sprite.modulate = player_color
 			Logger.system("Applied color via modulate property", "PlayerSpawner")
 		else:
-			Logger.warning("PlayerSprite has no color/modulate property", "PlayerSpawner")
+			Logger.warning("PlayerSprite type " + player_sprite.get_class() + " not supported for coloring", "PlayerSpawner")
 			return
 
 ## Modify spawn settings for all future spawns

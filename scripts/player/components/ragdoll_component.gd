@@ -160,13 +160,32 @@ func _create_ragdoll_body() -> void:
 	ragdoll_collision.position.y = -5  # Move collision up for higher center of gravity
 	ragdoll_body.add_child(ragdoll_collision)
 	
-	# Copy sprite appearance
+	# Copy sprite appearance - create capsule-like visual to match player
 	var ragdoll_sprite: Sprite2D = Sprite2D.new()
-	var ragdoll_rect: ColorRect = ColorRect.new()
-	ragdoll_rect.size = Vector2(20, 40)
-	ragdoll_rect.position = Vector2(-10, -20)  # Centered on ragdoll body
-	ragdoll_rect.color = Color(1.0, 0.6, 0.6, 1.0)  # Reddish tint for ragdoll state
-	ragdoll_sprite.add_child(ragdoll_rect)
+	var ragdoll_capsule: Node2D = Node2D.new()
+	
+	# Create capsule body (main rectangle)
+	var ragdoll_body_rect: ColorRect = ColorRect.new()
+	ragdoll_body_rect.size = Vector2(20, 20)
+	ragdoll_body_rect.position = Vector2(-10, -10)  # Centered
+	ragdoll_body_rect.color = Color(1.0, 0.6, 0.6, 1.0)  # Reddish tint for ragdoll state
+	ragdoll_capsule.add_child(ragdoll_body_rect)
+	
+	# Create top cap (narrower)
+	var ragdoll_top_cap: ColorRect = ColorRect.new()
+	ragdoll_top_cap.size = Vector2(14, 7)
+	ragdoll_top_cap.position = Vector2(-7, -17)  # Centered above body
+	ragdoll_top_cap.color = Color(1.0, 0.6, 0.6, 1.0)  # Same reddish tint
+	ragdoll_capsule.add_child(ragdoll_top_cap)
+	
+	# Create bottom cap (narrower)
+	var ragdoll_bottom_cap: ColorRect = ColorRect.new()
+	ragdoll_bottom_cap.size = Vector2(14, 7)
+	ragdoll_bottom_cap.position = Vector2(-7, 10)  # Centered below body
+	ragdoll_bottom_cap.color = Color(1.0, 0.6, 0.6, 1.0)  # Same reddish tint
+	ragdoll_capsule.add_child(ragdoll_bottom_cap)
+	
+	ragdoll_sprite.add_child(ragdoll_capsule)
 	ragdoll_body.add_child(ragdoll_sprite)
 	
 	# Add to scene
