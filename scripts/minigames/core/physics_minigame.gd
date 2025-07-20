@@ -423,9 +423,10 @@ func _on_damage_reported(victim_id: int, attacker_id: int, damage: int, source_n
 		victim_player = player_spawner.get_player(victim_id)
 	
 	if victim_player:
-		# Apply damage directly to player health for immediate physics response
-		victim_player.take_damage(damage)
-		Logger.combat("PhysicsMinigame: Applied " + str(damage) + " damage from " + source_name + " to " + victim_data.player_name, "PhysicsMinigame")
+		# CRITICAL FIX: Use unified take_damage method with proper attribution
+		# This preserves kill tracking info instead of stripping it like the old generic method
+		victim_player.health.take_damage(damage, null, attacker_id, source_name)
+		Logger.combat("PhysicsMinigame: Applied " + str(damage) + " damage from " + source_name + " to " + victim_data.player_name + " (attacker: " + str(attacker_id) + ")", "PhysicsMinigame")
 	else:
 		Logger.warning("PhysicsMinigame: Could not find player " + str(victim_id) + " to apply damage", "PhysicsMinigame")
 

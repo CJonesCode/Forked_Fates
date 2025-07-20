@@ -43,11 +43,15 @@ func show_player_hud(players: Array[PlayerData]) -> void:
 ## Hide player HUD
 func hide_player_hud() -> void:
 	if current_player_hud:
+		# Cleanup HUD resources including kill feed
+		if current_player_hud.has_method("cleanup_hud"):
+			current_player_hud.cleanup_hud()
+		
 		current_player_hud.queue_free()
 		current_player_hud = null
 		hud_visible = false
 		hud_visibility_changed.emit(false)
-		Logger.debug("Player HUD hidden", "HUDController")
+		Logger.debug("Player HUD hidden with cleanup", "HUDController")
 
 ## Toggle HUD visibility
 func toggle_hud_visibility() -> void:

@@ -397,7 +397,11 @@ func get_weapon_info() -> Dictionary:
 ## Unified throw/drop system - force determines if weaponized or gentle drop
 func throw_weapon(direction: Vector2, force: float, thrower_id: int) -> bool:
 	if not is_held or not holder:
+		Logger.debug("🚀 throw_weapon() failed - is_held=" + str(is_held) + " holder=" + str(holder != null), "BaseWeapon")
 		return false
+	
+	Logger.combat("🚀 WEAPON THROW START: " + item_name + " thrown by player " + str(thrower_id) + " with force " + str(force), "BaseWeapon")
+	Logger.debug("🚀 Throw details: direction=" + str(direction) + " force=" + str(force) + " thrower_id=" + str(thrower_id), "BaseWeapon")
 	
 	# CRITICAL: Detach weapon from player first (shared logic)
 	_detach_from_player()
@@ -413,15 +417,19 @@ func throw_weapon(direction: Vector2, force: float, thrower_id: int) -> bool:
 		ricochet_count = 0
 		throw_damage = int(base_damage * throw_damage_multiplier)
 		
+		Logger.combat("🚀 ✅ WEAPON WEAPONIZED: " + item_name + " set to projectile mode (thrown_by_id: " + str(thrown_by_id) + ", damage: " + str(throw_damage) + ")", "BaseWeapon")
+		
 		# Enable projectile collision mode (can damage players)
 		_enable_projectile_mode()
 		
-		Logger.combat("Weapon " + item_name + " WEAPONIZED with force " + str(clamped_force) + " (damage: " + str(throw_damage) + ")", "BaseWeapon")
+		Logger.combat("🚀 Weapon " + item_name + " WEAPONIZED with force " + str(clamped_force) + " (damage: " + str(throw_damage) + ")", "BaseWeapon")
 	else:
 		# LOW FORCE: Gentle drop mode
 		is_thrown_projectile = false
 		thrown_by_id = -1
 		throw_damage = 0
+		
+		Logger.debug("🚀 GENTLE DROP: " + item_name + " dropped gently (not weaponized)", "BaseWeapon")
 		
 		# Use normal item collision (can be picked up, won't damage)
 		CollisionLayers.setup_item(self)
@@ -430,7 +438,7 @@ func throw_weapon(direction: Vector2, force: float, thrower_id: int) -> bool:
 		rotation = 0.0
 		scale.x = abs(scale.x)
 		
-		Logger.pickup("Weapon " + item_name + " gently dropped with force " + str(clamped_force), "BaseWeapon")
+		Logger.pickup("🚀 Weapon " + item_name + " gently dropped with force " + str(clamped_force), "BaseWeapon")
 	
 	# Apply physics (shared logic)
 	linear_velocity = direction.normalized() * clamped_force
@@ -447,6 +455,7 @@ func throw_weapon(direction: Vector2, force: float, thrower_id: int) -> bool:
 	# Emit appropriate signal
 	weapon_thrown.emit(thrower_id)
 	
+	Logger.debug("🚀 Weapon throw completed - is_thrown_projectile=" + str(is_thrown_projectile) + " thrown_by_id=" + str(thrown_by_id), "BaseWeapon")
 	return true
 
 ## Convenience method: Gentle drop (backwards compatibility)
@@ -538,33 +547,69 @@ func _on_thrown_weapon_collision(body_rid: RID, body: Node, body_shape_index: in
 
 ## Handle hitting a player with thrown weapon
 func _hit_player_with_thrown_weapon(player: BasePlayer) -> void:
-	var thrower: BasePlayer = PlayerManager.get_player(thrown_by_id)
 	if not player:
+		Logger.debug("🚀 Thrown weapon hit - no player target, stopping weapon", "BaseWeapon")
 		_stop_thrown_weapon()
 		return
 	
-	# Report damage through universal damage system
-	var player_data: PlayerData = player.get_player_data()
-	var thrower_data: PlayerData = thrower.player_data if thrower else null
-	if player_data and thrower_data:
-		EventBus.report_player_damage(
-			player_data.player_id,
-			thrower_data.player_id,
-			throw_damage,
-			"Thrown " + item_name
-		)
-		
-		var player_name: String = player_data.player_name
-		var thrower_name: String = thrower_data.player_name
-		Logger.combat("Thrown " + item_name + " from " + thrower_name + " hit " + player_name + " for " + str(throw_damage) + " damage", "BaseWeapon")
+	Logger.combat("🚀 THROWN WEAPON HIT: " + item_name + " hit " + player.player_data.player_name + " (thrown_by_id: " + str(thrown_by_id) + ")", "BaseWeapon")
+	
+	# Look up the thrower using stored ID
+	var thrower: BasePlayer = PlayerManager.get_player(thrown_by_id) if thrown_by_id != -1 else null
+	
+	Logger.debug("🚀 Thrower lookup: thrown_by_id=" + str(thrown_by_id) + " thrower_found=" + str(thrower != null), "BaseWeapon")
+	if thrower:
+		Logger.debug("🚀 Thrower details: name=" + thrower.player_data.player_name + " id=" + str(thrower.player_data.player_id), "BaseWeapon")
+	
+	# Apply damage with kill tracking info
+	if player.health:
+		if thrower and thrower.player_data:
+			Logger.combat("🚀 ✅ APPLYING THROWN DAMAGE: " + str(throw_damage) + " from " + thrower.player_data.player_name + " (ID: " + str(thrower.player_data.player_id) + ") to " + player.player_data.player_name, "BaseWeapon")
+			
+			# SUCCESS: Proper kill attribution with thrower info
+			player.health.take_damage(
+				throw_damage,
+				self,
+				thrower.player_data.player_id,
+				"Thrown " + item_name
+			)
+			
+			var player_name: String = player.player_data.player_name
+			var thrower_name: String = thrower.player_data.player_name
+			Logger.combat("🚀 ✅ Thrown " + item_name + " from " + thrower_name + " hit " + player_name + " for " + str(throw_damage) + " damage - ATTRIBUTION SUCCESS", "BaseWeapon")
+		elif thrown_by_id != -1:
+			Logger.error("🚀 ❌ ATTRIBUTION FAILED: thrown_by_id=" + str(thrown_by_id) + " but PlayerManager lookup failed", "BaseWeapon")
+			Logger.error("🚀 Available players in PlayerManager: " + str(PlayerManager.players.keys()), "BaseWeapon")
+			
+			# ERROR: Valid thrower ID but lookup failed
+			player.health.take_damage(
+				throw_damage,
+				self,
+				-1,
+				"Thrown " + item_name
+			)
+			Logger.combat("🚀 ❌ Thrown " + item_name + " hit " + player.player_data.player_name + " - attribution FAILED, falling back to environmental", "BaseWeapon")
+		else:
+			Logger.debug("🚀 Environmental throw: thrown_by_id=-1, expected environmental damage", "BaseWeapon")
+			
+			# Expected: No thrower ID (environmental throw)
+			player.health.take_damage(
+				throw_damage,
+				self,
+				-1,
+				"Thrown " + item_name
+			)
+			Logger.combat("🚀 Thrown " + item_name + " hit " + player.player_data.player_name + " - no thrower (environmental)", "BaseWeapon")
 	else:
-		Logger.warning("Failed to get player/thrower data for damage reporting", "BaseWeapon")
+		Logger.error("🚀 Target player has no health component: " + player.player_data.player_name, "BaseWeapon")
 	
 	# Apply knockback/ragdoll force
 	_apply_thrown_weapon_knockback(player)
 	
 	# Stop the thrown weapon
 	_stop_thrown_weapon()
+	
+	Logger.debug("🚀 Thrown weapon hit processing completed", "BaseWeapon")
 
 ## Apply knockback/ragdoll from thrown weapon impact
 func _apply_thrown_weapon_knockback(target: BasePlayer) -> void:
@@ -649,4 +694,15 @@ func _exit_tree() -> void:
 		body_shape_entered.disconnect(_on_thrown_weapon_collision)
 	
 	# Basic cleanup
-	super() 
+	super()
+
+## Getter methods for kill tracking integration
+func get_holder_id() -> int:
+	if holder and holder.player_data:
+		return holder.player_data.player_id
+	return thrown_by_id if thrown_by_id != -1 else -1
+
+func get_weapon_name() -> String:
+	return item_name
+
+ 

@@ -50,6 +50,7 @@ func _ready() -> void:
 	if not player_data:
 		player_data = PlayerData.new(0, "Player")
 		Logger.warning("BasePlayer created default PlayerData - this should only happen in standalone testing", "BasePlayer")
+		return
 	else:
 		Logger.system("BasePlayer using assigned PlayerData: " + player_data.player_name + " (ID: " + str(player_data.player_id) + ")", "BasePlayer")
 	
@@ -138,7 +139,13 @@ func _set_current_state(new_state: PlayerState) -> void:
 	
 	_handle_state_transition(old_state, new_state)
 	player_state_changed.emit(new_state)
-	Logger.player(player_data.player_name, "state changed: " + PlayerState.keys()[old_state] + " -> " + PlayerState.keys()[new_state], "BasePlayer")
+	
+	var player_display: String = ""
+	if player_data:
+		player_display = player_data.player_name + " (Player " + str(player_data.player_id) + ")"
+	else:
+		player_display = "Unknown Player"
+	Logger.player(player_display + ": state changed: " + PlayerState.keys()[old_state] + " -> " + PlayerState.keys()[new_state], "BasePlayer")
 
 ## Handle state transitions between different player states
 func _handle_state_transition(old_state: PlayerState, new_state: PlayerState) -> void:
@@ -186,9 +193,9 @@ func set_health(new_health: int) -> void:
 		health.set_health(new_health)
 
 ## Take damage
-func take_damage(damage: int, source: Node = null) -> void:
+func take_damage(damage: int, source: Node = null, attacker_id: int = -1, source_name: String = "Environmental") -> void:
 	if health:
-		health.take_damage(damage, source)
+		health.take_damage(damage, source, attacker_id, source_name)
 
 ## Heal the player
 func heal(amount: int) -> void:
@@ -201,7 +208,13 @@ func die() -> void:
 
 ## Respawn the player
 func respawn() -> void:
-	Logger.player(player_data.player_name, "respawning at " + str(spawn_position), "BasePlayer")
+	var player_display: String = ""
+	if player_data:
+		player_display = player_data.player_name + " (Player " + str(player_data.player_id) + ")"
+	else:
+		player_display = "Unknown Player"
+	
+	Logger.player(player_display + ": respawning at " + str(spawn_position), "BasePlayer")
 	
 	# Clean up any ragdoll state
 	if ragdoll:
@@ -227,12 +240,17 @@ func respawn() -> void:
 	player_respawned.emit()
 	EventBus.emit_player_respawned(player_data.player_id)
 	
-	Logger.player(player_data.player_name, "respawned successfully!", "BasePlayer")
+	Logger.player(player_display + ": respawned successfully!", "BasePlayer")
 
 ## Set spawn position
 func set_spawn_position(spawn_pos: Vector2) -> void:
 	spawn_position = spawn_pos
-	Logger.system("Set spawn position for " + player_data.player_name + " to " + str(spawn_position), "BasePlayer")
+	var player_display: String = ""
+	if player_data:
+		player_display = player_data.player_name + " (Player " + str(player_data.player_id) + ")"
+	else:
+		player_display = "Unknown Player"
+	Logger.system("Set spawn position for " + player_display + " to " + str(spawn_position), "BasePlayer")
 
 ## Get component by type (utility method) - universal held objects
 func get_component(component_type) -> BaseComponent:

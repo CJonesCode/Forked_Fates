@@ -14,6 +14,10 @@ var swing_recovery_time: float = 0.2
 var knockback_force: float = 300.0
 var swing_damage: int = 3
 
+# Store attacker info for kill attribution (fix for holder clearing issue)
+var swinging_player_id: int = -1
+var swinging_player_name: String = ""
+
 # Component references (optional - may not exist in scene)
 var swing_area: Area2D
 var swing_collision: CollisionShape2D
@@ -79,14 +83,34 @@ func _physics_process(delta: float) -> void:
 ## Perform bat swing (projectile melee combat)
 func fire_weapon() -> bool:
 	if not is_held or not holder or is_swinging:
+		Logger.debug("🏏 Bat fire_weapon() failed - is_held=" + str(is_held) + " holder=" + str(holder != null) + " is_swinging=" + str(is_swinging), "Bat")
 		return false
 	
-	Logger.combat("Bat swung by " + holder.player_data.player_name, "Bat")
+	# CRITICAL: Store attacker info BEFORE swing operations to prevent attribution loss
+	swinging_player_id = holder.player_data.player_id if holder.player_data else -1
+	swinging_player_name = holder.player_data.player_name if holder.player_data else "Unknown Player"
+	
+	# Format attacker display consistently
+	var attacker_display: String = ""
+	if holder and holder.player_data:
+		attacker_display = holder.player_data.player_name + " (Player " + str(holder.player_data.player_id) + ")"
+	else:
+		attacker_display = "Unknown Player"
+	
+	Logger.combat("🏏 BAT SWING START: " + attacker_display + " - holder valid: " + str(holder != null), "Bat")
+	Logger.debug("🏏 Stored attacker info BEFORE swing: ID=" + str(swinging_player_id) + " name=" + swinging_player_name, "Bat")
 	
 	# Start swing
 	is_swinging = true
 	swing_timer = 0.0
 	swing_targets.clear()
+	
+	# Enable swing collision area for damage detection
+	if swing_area:
+		swing_area.monitoring = true
+		Logger.debug("🏏 Swing area enabled for collision detection", "Bat")
+	else:
+		Logger.warning("🏏 No swing area found - collision detection disabled!", "Bat")
 	
 	# Play swing audio
 	if swing_audio:
@@ -98,7 +122,7 @@ func fire_weapon() -> bool:
 	# Emit weapon fired signal
 	weapon_fired.emit()
 	
-	Logger.combat("Bat swing initiated", "Bat")
+	Logger.combat("🏏 Bat swing initiated successfully - monitoring for hits", "Bat")
 	return true
 
 ## Calculate swing direction based on player facing
@@ -149,53 +173,107 @@ func _end_swing() -> void:
 	# Reset rotation
 	rotation = 0.0
 	
+	# Clear stored attacker info when swing ends
+	swinging_player_id = -1
+	swinging_player_name = ""
+	
 	Logger.debug("Bat swing completed", "Bat")
 
 ## Handle swing area collision with targets
 func _on_swing_area_entered(body: Node2D) -> void:
-	if not is_swinging or not holder:
+	Logger.debug("🏏 Collision detected: " + body.name + " (" + body.get_class() + ") - is_swinging=" + str(is_swinging), "Bat")
+	
+	if not is_swinging:
+		Logger.debug("🏏 Ignoring collision - not currently swinging", "Bat")
 		return
 	
-	# Don't hit the wielder
-	if body == holder:
-		return
+	# Don't hit the wielder (check by ID to handle holder changes)
+	if body is BasePlayer:
+		var body_player: BasePlayer = body as BasePlayer
+		if body_player.player_data and body_player.player_data.player_id == swinging_player_id:
+			Logger.debug("🏏 Ignoring collision with wielder (ID: " + str(swinging_player_id) + ")", "Bat")
+			return
 	
 	# Only hit players
 	if not body is BasePlayer:
+		Logger.debug("🏏 Ignoring collision - not a player: " + body.name, "Bat")
 		return
 	
 	var target_player: BasePlayer = body as BasePlayer
 	
 	# Don't hit the same target multiple times in one swing
 	if target_player in swing_targets:
+		Logger.debug("🏏 Ignoring collision - already hit this target in current swing", "Bat")
 		return
 	
 	swing_targets.append(target_player)
 	
-	Logger.combat("Bat hit " + target_player.player_data.player_name, "Bat")
-	
-	# Apply damage through damage system
+	# Format target display consistently
+	var target_display: String = ""
 	if target_player.player_data:
-		EventBus.report_player_damage(
-			target_player.player_data.player_id,
-			holder.player_data.player_id,
-			swing_damage,
-			"Bat Swing"
-		)
+		target_display = target_player.player_data.player_name + " (Player " + str(target_player.player_data.player_id) + ")"
+	else:
+		target_display = "Unknown Player"
+	
+	# Format attacker display consistently  
+	var attacker_display: String = ""
+	var attacker_data: PlayerData = GameManager.get_player_data(swinging_player_id)
+	if attacker_data:
+		attacker_display = attacker_data.player_name + " (Player " + str(swinging_player_id) + ")"
+	else:
+		attacker_display = "Player (Player " + str(swinging_player_id) + ")"
+	
+	Logger.combat("🏏 BAT HIT DETECTED: " + target_display + " hit by " + attacker_display, "Bat")
+	Logger.debug("🏏 Current holder state: " + str(holder != null) + " - using stored attacker info instead", "Bat")
+	
+	# Apply damage using stored attacker info (no dependency on holder reference)
+	if target_player.health:
+		if swinging_player_id != -1:
+			Logger.combat("🏏 APPLYING DAMAGE: " + str(swing_damage) + " from " + attacker_display + " to " + target_display, "Bat")
+			
+			# Successful kill attribution with stored player ID
+			target_player.health.take_damage(
+				swing_damage,
+				self,
+				swinging_player_id,
+				"Bat"
+			)
+			Logger.combat("🏏 ✅ Bat damage attributed to " + attacker_display, "Bat")
+		else:
+			Logger.error("🏏 ❌ ATTRIBUTION FAILED: swinging_player_id is -1, falling back to environmental damage", "Bat")
+			
+			# Fallback: environmental damage if no valid attacker stored
+			target_player.health.take_damage(
+				swing_damage,
+				self,
+				-1,
+				"Bat"
+			)
+			Logger.warning("🏏 Bat damage fell back to environmental - no valid attacker stored", "Bat")
+	else:
+		Logger.error("🏏 Target player has no health component: " + target_display, "Bat")
 	
 	# Apply knockback force to target (projectile physics)
 	_apply_knockback(target_player)
 	
 	# Emit hit signal
 	weapon_hit_target.emit(target_player, swing_damage)
+	
+	Logger.debug("🏏 Bat hit processing completed for " + target_display, "Bat")
 
 ## Apply knockback force to target (projectile physics)
 func _apply_knockback(target: BasePlayer) -> void:
-	if not target or not holder:
+	if not target:
+		return
+	
+	# Use stored attacker position for knockback calculation
+	var attacker: BasePlayer = PlayerManager.get_player(swinging_player_id) if swinging_player_id != -1 else null
+	if not attacker:
+		Logger.warning("Cannot apply knockback - attacker not found: " + str(swinging_player_id), "Bat")
 		return
 	
 	# Calculate knockback direction (away from wielder)
-	var knockback_direction: Vector2 = (target.global_position - holder.global_position).normalized()
+	var knockback_direction: Vector2 = (target.global_position - attacker.global_position).normalized()
 	
 	# Apply knockback force (projectile style - strong knockback)
 	target.velocity += knockback_direction * knockback_force
@@ -203,7 +281,20 @@ func _apply_knockback(target: BasePlayer) -> void:
 	# Add slight upward component for satisfying arc
 	target.velocity.y -= knockback_force * 0.3
 	
-	Logger.combat("Applied " + str(knockback_force) + " knockback to " + target.player_data.player_name, "Bat")
+	# Format display names consistently
+	var target_display: String = ""
+	if target.player_data:
+		target_display = target.player_data.player_name + " (Player " + str(target.player_data.player_id) + ")"
+	else:
+		target_display = "Unknown Player"
+	
+	var attacker_display: String = ""
+	if attacker.player_data:
+		attacker_display = attacker.player_data.player_name + " (Player " + str(attacker.player_data.player_id) + ")"
+	else:
+		attacker_display = "Unknown Player"
+	
+	Logger.combat("Applied " + str(knockback_force) + " knockback to " + target_display + " from " + attacker_display, "Bat")
 
 ## Reset bat for object pooling
 func reset_for_pool() -> void:
@@ -218,6 +309,10 @@ func reset_for_pool() -> void:
 	# Disable swing area
 	if swing_area:
 		swing_area.monitoring = false
+	
+	# Clear stored attacker info when resetting
+	swinging_player_id = -1
+	swinging_player_name = ""
 	
 	Logger.debug("Bat reset for pooling", "Bat")
 

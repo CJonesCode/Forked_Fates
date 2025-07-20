@@ -1,5 +1,5 @@
 class_name ProjectileBullet
-extends RigidBody2D
+extends BaseItem
 
 ## Bullet projectile for projectile-style weapons with object pooling support
 ## Features collision detection, damage dealing, and optional ricochet mechanics
@@ -23,20 +23,25 @@ var is_destroyed: bool = false  # Flag to prevent race conditions
 var penetration_count: int = 0
 var max_penetrations: int = 0
 
-# Component references
-@onready var sprite: Sprite2D = $Sprite2D
-@onready var collision_shape: CollisionShape2D = $CollisionShape2D
+# Component references (sprite and collision_shape inherited from BaseItem)
 # Note: TrailParticles node doesn't exist in scene - skip for now
 var trail_particles: CPUParticles2D = null
 
 func _ready() -> void:
-	# Setup physics
-	gravity_scale = 0  # Bullets ignore gravity
-	contact_monitor = true
-	max_contacts_reported = 10
+	# Call parent BaseItem initialization first
+	super._ready()
+	
+	# Override BaseItem properties for projectile behavior
+	can_be_picked_up = false  # Bullets cannot be picked up
+	can_be_dropped = false    # Bullets cannot be dropped
+	
+	# Override BaseItem physics settings for projectile behavior
+	gravity_scale = 0  # Bullets ignore gravity (override BaseItem's gravity_scale = 1.0)
+	contact_monitor = true  # Already set by BaseItem, but ensure it's enabled
+	max_contacts_reported = 10  # Already set by BaseItem
 	continuous_cd = RigidBody2D.CCD_MODE_CAST_RAY  # Prevent fast bullets from tunneling
 	
-	# Setup collision layers
+	# Setup collision layers for bullets (override BaseItem's item collision layers)
 	CollisionLayers.setup_bullet(self)
 	
 	# Connect collision signal safely - use body_shape_entered for RigidBody2D
@@ -134,20 +139,27 @@ func _hit_player(player: BasePlayer) -> void:
 		_destroy_bullet()
 		return
 	
-	# Report damage through universal damage system
-	var player_data: PlayerData = player.get_player_data()
-	var shooter_data: PlayerData = shooter.player_data if shooter else null
-	if player_data and shooter_data:
-		EventBus.report_player_damage(
-			player_data.player_id,
-			shooter_data.player_id,
+	# Apply damage directly with kill tracking info
+	if player.health and shooter and shooter.player_data:
+		player.health.take_damage(
 			damage,
+			self,
+			shooter.player_data.player_id,
 			"Bullet"
 		)
 		
-		var player_name: String = player_data.player_name
-		var shooter_name: String = shooter_data.player_name
+		var player_name: String = player.player_data.player_name
+		var shooter_name: String = shooter.player_data.player_name
 		Logger.combat("Bullet from " + shooter_name + " hit " + player_name + " for " + str(damage) + " damage", "Bullet")
+	elif player.health:
+		# Fallback: environmental damage if no shooter found
+		player.health.take_damage(
+			damage,
+			self,
+			-1,
+			"Bullet"
+		)
+		Logger.combat("Stray bullet hit " + player.player_data.player_name + " for " + str(damage) + " damage", "Bullet")
 	
 	# Check for penetration (enhanced projectile mechanic)
 	if penetration_count < max_penetrations:
@@ -344,4 +356,13 @@ func get_shooter_name() -> String:
 	var shooter: BasePlayer = get_shooter()
 	if shooter and shooter.player_data:
 		return shooter.player_data.player_name
-	return "None" 
+	return "None"
+
+## Getter methods for kill tracking integration
+func get_shooter_id() -> int:
+	return shooter_id
+
+func get_weapon_name() -> String:
+	return "Bullet"
+
+ 

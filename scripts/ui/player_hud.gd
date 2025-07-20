@@ -7,6 +7,9 @@ extends CanvasLayer
 # UI container for the HUD
 @onready var hud_container: HBoxContainer = $HUDContainer
 
+# Kill feed component
+var kill_feed: Control = null
+
 # Player colors (Smash Bros style)
 var player_colors: Array[Color] = [
 	Color(1.0, 0.3, 0.3, 1.0),  # Player 1 - Red
@@ -34,6 +37,9 @@ func _ready() -> void:
 	# Create UI for all players
 	_create_player_panels()
 	
+	# Create kill feed component
+	_create_kill_feed()
+	
 	# Debug UI visibility and positioning
 	Logger.debug("PlayerHUD scene tree position: " + str(get_path()), "PlayerHUD")
 	Logger.debug("PlayerHUD visible: " + str(visible), "PlayerHUD")
@@ -43,7 +49,7 @@ func _ready() -> void:
 		Logger.debug("HUDContainer children: " + str(hud_container.get_child_count()), "PlayerHUD")
 		Logger.debug("HUDContainer visible: " + str(hud_container.visible), "PlayerHUD")
 	
-	Logger.system("PlayerHUD initialized with lives and health percentage display", "PlayerHUD")
+	Logger.system("PlayerHUD initialized with lives and health percentage display + kill feed", "PlayerHUD")
 
 ## Create UI panels for all players
 func _create_player_panels() -> void:
@@ -84,6 +90,17 @@ func _create_player_panel(player_data: PlayerData, player_id: int) -> Control:
 				print("         Text: '", child.text, "'")
 	
 	return panel
+
+## Create kill feed component
+func _create_kill_feed() -> void:
+	# Load kill feed scene
+	var kill_feed_scene = load("res://scenes/ui/components/kill_feed.tscn")
+	if kill_feed_scene:
+		kill_feed = kill_feed_scene.instantiate()
+		add_child(kill_feed)
+		Logger.debug("Kill feed component created and added to PlayerHUD", "PlayerHUD")
+	else:
+		Logger.error("Failed to load kill feed scene", "PlayerHUD")
 
 ## Update player health display
 func _update_player_health(player_id: int, new_health: int) -> void:
@@ -169,31 +186,61 @@ func _update_player_lives(player_id: int, new_lives: int) -> void:
 	
 	print("🔧 Updating lives for Player ", player_id, " to: ", new_lives)
 	
-	# Get the VBoxContainer first, then find LivesLabel within it
+	# Get the VBoxContainer first, then find LivesContainer within it
 	var vbox = panel.get_child(0) as VBoxContainer
 	if not vbox:
 		print("   ❌ VBoxContainer not found in panel!")
 		return
 	
-	var lives_label: Label = null
+	var lives_container: HBoxContainer = null
 	for child in vbox.get_children():
-		if child.name == "LivesLabel":
-			lives_label = child as Label
+		if child.name == "LivesContainer":
+			lives_container = child as HBoxContainer
 			break
 	
-	if lives_label:
-		lives_label.text = "Lives: " + str(new_lives)
-		print("   ✅ Lives label updated to: ", lives_label.text)
-		
-		# Color code lives
-		if new_lives > 1:
-			lives_label.add_theme_color_override("font_color", Color.WHITE)
-		elif new_lives == 1:
-			lives_label.add_theme_color_override("font_color", Color.YELLOW)
-		else:
-			lives_label.add_theme_color_override("font_color", Color.RED)
+	if lives_container:
+		# Update lives pips using UIFactory
+		var player_color = player_colors[player_id % player_colors.size()]
+		UIFactory._update_lives_pips(lives_container, new_lives, player_color)
+		print("   ✅ Lives pips updated to: ", new_lives)
 	else:
-		print("   ❌ LivesLabel not found in VBox!")
+		print("   ❌ LivesContainer not found in VBox!")
+
+## Update player kills display (new)
+func _update_player_kills(player_id: int, new_kills: int) -> void:
+	if player_id >= player_panels.size():
+		Logger.warning("Kills update: Player ID " + str(player_id) + " out of range! Panel count: " + str(player_panels.size()), "PlayerHUD")
+		return
+	
+	var panel = player_panels[player_id]
+	
+	print("🔧 Updating kills for Player ", player_id, " to: ", new_kills)
+	
+	# Get the VBoxContainer first, then find KillsLabel within it
+	var vbox = panel.get_child(0) as VBoxContainer
+	if not vbox:
+		print("   ❌ VBoxContainer not found in panel!")
+		return
+	
+	var kills_label: Label = null
+	for child in vbox.get_children():
+		if child.name == "KillsLabel":
+			kills_label = child as Label
+			break
+	
+	if kills_label:
+		kills_label.text = "Kills: " + str(new_kills)
+		print("   ✅ Kills label updated to: ", kills_label.text)
+		
+		# Color code kills (gold for high kill counts)
+		if new_kills >= 3:
+			kills_label.add_theme_color_override("font_color", Color.GOLD)
+		elif new_kills >= 1:
+			kills_label.add_theme_color_override("font_color", Color.YELLOW)
+		else:
+			kills_label.add_theme_color_override("font_color", Color.WHITE)
+	else:
+		print("   ❌ KillsLabel not found in VBox!")
 
 ## Update player status display
 func _update_player_status(player_id: int, status: String, color: Color = Color.WHITE) -> void:
@@ -238,6 +285,13 @@ func _on_player_lives_changed(player_id: int, new_lives: int) -> void:
 	_update_player_lives(player_id, new_lives)
 	_flash_panel(player_id, Color.ORANGE)  # Flash orange on life loss
 
+func _on_player_kills_changed(player_id: int, new_kills: int) -> void:
+	Logger.debug("🎮 HUD: Received kill update for player " + str(player_id) + " - new kills: " + str(new_kills), "PlayerHUD")
+	Logger.combat("🎮 PlayerHUD received kill update: Player " + str(player_id) + " now has " + str(new_kills) + " kills", "PlayerHUD")
+	
+	_update_player_kills(player_id, new_kills)
+	_flash_panel(player_id, Color.YELLOW)  # Flash yellow on kill
+
 func _on_player_died(player_id: int) -> void:
 	_update_player_status(player_id, "DEAD", Color.RED)
 	_flash_panel(player_id, Color.DARK_RED)
@@ -257,4 +311,19 @@ func _on_player_recovered(player_id: int) -> void:
 
 func _on_player_respawn_timer_updated(player_id: int, time_remaining: float) -> void:
 	var countdown_text = "RESPAWN " + str(int(ceil(time_remaining)))
-	_update_player_status(player_id, countdown_text, Color.YELLOW) 
+	_update_player_status(player_id, countdown_text, Color.YELLOW)
+
+## Cleanup HUD resources
+func cleanup_hud() -> void:
+	# Clear kill feed
+	if kill_feed:
+		kill_feed.clear_all_entries()
+		kill_feed.queue_free()
+		kill_feed = null
+	
+	# Clear player panels
+	for child in hud_container.get_children():
+		child.queue_free()
+	player_panels.clear()
+	
+	Logger.debug("PlayerHUD cleanup completed", "PlayerHUD") 

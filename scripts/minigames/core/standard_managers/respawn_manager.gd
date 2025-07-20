@@ -87,8 +87,16 @@ func _on_player_died(player_id: int) -> void:
 		max_respawns_reached.emit(player_id)
 		return
 	
+	# Get player name for clearer logging
+	var player_data: PlayerData = GameManager.get_player_data(player_id)
+	var player_display: String = ""
+	if player_data:
+		player_display = player_data.player_name + " (Player " + str(player_id) + ")"
+	else:
+		player_display = "Player (Player " + str(player_id) + ")"
+	
 	# Start respawn process
-	Logger.game_flow("Starting respawn process for Player " + str(player_id) + " in " + str(respawn_delay) + " seconds", "RespawnManager")
+	Logger.game_flow("Starting respawn process for " + player_display + " in " + str(respawn_delay) + " seconds", "RespawnManager")
 	Logger.system("Available respawn points: " + str(respawn_points.size()), "RespawnManager")
 	dead_players[player_id] = respawn_delay
 	
@@ -96,40 +104,47 @@ func _on_player_died(player_id: int) -> void:
 	var player: BasePlayer = _get_player_by_id(player_id)
 	if player:
 		player.modulate.a = 0.5
-		Logger.system("Player " + str(player_id) + " found and made half transparent for respawn countdown", "RespawnManager")
+		Logger.system(player_display + " found and made half transparent for respawn countdown", "RespawnManager")
 	else:
-		Logger.warning("Player " + str(player_id) + " not found for respawn countdown!", "RespawnManager")
+		Logger.warning(player_display + " not found for respawn countdown!", "RespawnManager")
 
 ## Respawn a specific player
 func _respawn_player(player_id: int) -> void:
-	Logger.system("Attempting to respawn Player " + str(player_id), "RespawnManager")
+	# Get player name for clearer logging
+	var player_data: PlayerData = GameManager.get_player_data(player_id)
+	var player_display: String = ""
+	if player_data:
+		player_display = player_data.player_name + " (Player " + str(player_id) + ")"
+	else:
+		player_display = "Player (Player " + str(player_id) + ")"
+	
+	Logger.system("Attempting to respawn " + player_display, "RespawnManager")
 	
 	var player: BasePlayer = _get_player_by_id(player_id)
 	if not player:
-		Logger.warning("Cannot respawn - player " + str(player_id) + " not found", "RespawnManager")
+		Logger.warning("Cannot respawn - " + player_display + " not found", "RespawnManager")
 		dead_players.erase(player_id)
 		return
 	
 	if respawn_points.is_empty():
-		Logger.warning("No respawn points available for Player " + str(player_id), "RespawnManager")
+		Logger.warning("No respawn points available for " + player_display, "RespawnManager")
 		dead_players.erase(player_id)
 		return
 	
 	# Choose respawn position
 	var respawn_position: Vector2 = _choose_respawn_position(player_id)
-	Logger.system("Respawning Player " + str(player_id) + " at position " + str(respawn_position), "RespawnManager")
+	Logger.system("Respawning " + player_display + " at position " + str(respawn_position), "RespawnManager")
 	
 	# Update player data
-	var player_data: PlayerData = GameManager.get_player_data(player_id)
 	if player_data:
 		player_data.current_health = player_data.max_health
 		player_data.is_alive = true
-		Logger.system("Updated GameManager player data for Player " + str(player_id), "RespawnManager")
+		Logger.system("Updated GameManager player data for " + player_display, "RespawnManager")
 	
 	# Set spawn position and respawn
 	player.set_spawn_position(respawn_position)
 	player.respawn()
-	Logger.system("Called player.respawn() for Player " + str(player_id), "RespawnManager")
+	Logger.system("Called player.respawn() for " + player_display, "RespawnManager")
 	
 	# Apply temporary invincibility if configured
 	if respawn_invincibility_time > 0:
@@ -141,7 +156,7 @@ func _respawn_player(player_id: int) -> void:
 	# Clean up tracking
 	dead_players.erase(player_id)
 	
-	Logger.game_flow("Player " + str(player_id) + " respawned at " + str(respawn_position), "RespawnManager")
+	Logger.game_flow(player_display + " respawned at " + str(respawn_position), "RespawnManager")
 	player_respawned.emit(player)
 
 ## Choose best respawn position for a player

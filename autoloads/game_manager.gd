@@ -276,12 +276,12 @@ func _initialize_session() -> void:
 	# Only create test players for local mode
 	# Multiplayer players will be added when they join the lobby
 	if not network_enabled:
-		# Create test players for local gameplay
+		# Create test players for local gameplay - Names are 1-based, IDs are 0-based for clear distinction
 		add_player(0, "Player 1")
-		add_player(1, "Player 2")
+		add_player(1, "Player 2") 
 		add_player(2, "Player 3")
 		add_player(3, "Player 4")
-		Logger.system("Created test players for local session", "GameManager")
+		Logger.system("Created test players for local session with 1-based names and 0-based IDs", "GameManager")
 	else:
 		Logger.system("Initialized empty session for multiplayer", "GameManager")
 

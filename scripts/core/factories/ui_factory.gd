@@ -149,14 +149,24 @@ static func create_player_panel(player_data: PlayerData, player_id: int, player_
 	name_label.add_theme_font_size_override("font_size", 16)
 	vbox.add_child(name_label)
 	
-	# Lives display
-	var lives_label = Label.new()
-	lives_label.name = "LivesLabel"
-	lives_label.text = "Lives: " + str(player_data.current_lives)
-	lives_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lives_label.add_theme_color_override("font_color", Color.WHITE)
-	lives_label.add_theme_font_size_override("font_size", 14)
-	vbox.add_child(lives_label)
+	# Lives display with pips (modified)
+	var lives_container = HBoxContainer.new()
+	lives_container.name = "LivesContainer"
+	lives_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	lives_container.add_theme_constant_override("separation", 2)  # Small spacing between pips
+	vbox.add_child(lives_container)
+	
+	# Create lives pips
+	_update_lives_pips(lives_container, player_data.current_lives, player_colors[player_id])
+	
+	# Kills display (new)
+	var kills_label = Label.new()
+	kills_label.name = "KillsLabel" 
+	kills_label.text = "Kills: 0"
+	kills_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	kills_label.add_theme_color_override("font_color", Color.YELLOW)
+	kills_label.add_theme_font_size_override("font_size", 12)
+	vbox.add_child(kills_label)
 	
 	# Health percentage display
 	var health_label = Label.new()
@@ -340,6 +350,68 @@ static func _create_hud_element(config: UIElementConfig) -> Control:
 # Helper methods
 static func _handle_menu_action(action_method: String, action_params: Dictionary) -> void:
 	EventBus.emit_signal("menu_action_triggered", action_method, action_params)
+
+## Create and update lives pips in the container
+static func _update_lives_pips(container: HBoxContainer, lives_count: int, player_color: Color) -> void:
+	# Clear existing pips
+	for child in container.get_children():
+		child.queue_free()
+	
+	# Create new pips
+	for i in range(lives_count):
+		var pip = _create_player_sprite_pip(player_color)
+		container.add_child(pip)
+
+## Create a tiny player sprite pip with black outline
+static func _create_player_sprite_pip(player_color: Color) -> Control:
+	var pip_container = Control.new()
+	pip_container.custom_minimum_size = Vector2(12, 16)  # Tiny size for pip
+	
+	# Create the capsule-like structure similar to player sprite
+	
+	# Main body (scaled down from 20x20 to 8x8)
+	var body = ColorRect.new()
+	body.size = Vector2(8, 8)
+	body.position = Vector2(2, 4)  # Centered within pip container
+	body.color = player_color
+	
+	# Add black outline to body
+	var body_outline = ColorRect.new()
+	body_outline.size = Vector2(10, 10)  # 1 pixel border around body
+	body_outline.position = Vector2(1, 3)
+	body_outline.color = Color.BLACK
+	pip_container.add_child(body_outline)
+	pip_container.add_child(body)
+	
+	# Top cap (scaled down from 14x7 to 6x3)
+	var top_cap = ColorRect.new()
+	top_cap.size = Vector2(6, 3)
+	top_cap.position = Vector2(3, 1)
+	top_cap.color = player_color
+	
+	# Add black outline to top cap
+	var top_outline = ColorRect.new()
+	top_outline.size = Vector2(8, 5)  # 1 pixel border around top cap
+	top_outline.position = Vector2(2, 0)
+	top_outline.color = Color.BLACK
+	pip_container.add_child(top_outline)
+	pip_container.add_child(top_cap)
+	
+	# Bottom cap (scaled down from 14x7 to 6x3)
+	var bottom_cap = ColorRect.new()
+	bottom_cap.size = Vector2(6, 3)
+	bottom_cap.position = Vector2(3, 12)
+	bottom_cap.color = player_color
+	
+	# Add black outline to bottom cap
+	var bottom_outline = ColorRect.new()
+	bottom_outline.size = Vector2(8, 5)  # 1 pixel border around bottom cap
+	bottom_outline.position = Vector2(2, 11)
+	bottom_outline.color = Color.BLACK
+	pip_container.add_child(bottom_outline)
+	pip_container.add_child(bottom_cap)
+	
+	return pip_container
 
 static func _apply_common_styling(element: Control, config: UIElementConfig) -> void:
 	if not element or not config:

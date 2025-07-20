@@ -28,11 +28,12 @@ var next_connection_id: int = 1
 signal player_health_changed(player_id: int, new_health: int, max_health: int)
 signal player_lives_changed(player_id: int, new_lives: int)  # New signal for lives
 signal player_died(player_id: int)
+signal player_killed_by(victim_id: int, killer_id: int, source_name: String)  # Updated: source_name instead of weapon_name
 signal player_respawned(player_id: int)
 signal player_ragdolled(player_id: int)
 signal player_recovered(player_id: int)
 signal player_respawn_timer_updated(player_id: int, time_remaining: float)
-signal player_damage_reported(victim_id: int, attacker_id: int, damage: int, weapon_name: String)
+signal player_damage_reported(victim_id: int, attacker_id: int, damage: int, source_name: String)  # Updated: source_name
 
 # Item-related signals  
 signal item_picked_up(player_id: int, item_name: String)
@@ -210,6 +211,10 @@ func emit_player_lives_changed(player_id: int, new_lives: int) -> void:
 func emit_player_died(player_id: int) -> void:
 	player_died.emit(player_id)
 
+## Emit a player killed by another player event
+func emit_player_killed_by(victim_id: int, killer_id: int, source_name: String) -> void:
+	player_killed_by.emit(victim_id, killer_id, source_name)
+
 ## Emit a player respawn event
 func emit_player_respawned(player_id: int) -> void:
 	player_respawned.emit(player_id)
@@ -219,8 +224,8 @@ func emit_player_respawn_timer_updated(player_id: int, time_remaining: float) ->
 	player_respawn_timer_updated.emit(player_id, time_remaining)
 
 ## Report damage dealt to a player (for minigame to handle)
-func report_player_damage(victim_id: int, attacker_id: int, damage: int, weapon_name: String) -> void:
-	player_damage_reported.emit(victim_id, attacker_id, damage, weapon_name)
+func report_player_damage(victim_id: int, attacker_id: int, damage: int, source_name: String) -> void:
+	player_damage_reported.emit(victim_id, attacker_id, damage, source_name)
 
 ## Emit an item pickup event
 func emit_item_picked_up(player_id: int, item_name: String) -> void:
@@ -290,7 +295,7 @@ func emit_network_event(event_name: String, data: Dictionary) -> void:
 				data.get("victim_id", -1),
 				data.get("attacker_id", -1),
 				data.get("damage", 0),
-				data.get("weapon", "")
+				data.get("source", "")  # Updated: "source" instead of "weapon"
 			)
 		"player_died":
 			player_died.emit(data.get("player_id", -1))

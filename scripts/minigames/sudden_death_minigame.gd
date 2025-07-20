@@ -5,8 +5,11 @@ extends PhysicsMinigame
 @onready var back_button: Button = $UIOverlay/BackButton
 @onready var game_timer_label: Label = $UIOverlay/GameTimer
 
-# Player HUD now managed by UIManager
+# Game state tracking
 var game_timer: float = 0.0
+
+# Kill tracking (simplified - no more timing windows)
+var player_kills: Dictionary = {}  # player_id -> kill_count
 
 func _ready() -> void:
 	super()
@@ -85,14 +88,18 @@ func _on_physics_initialize() -> void:
 	# Connect to player death events for lives management
 	EventBus.player_died.connect(_on_sudden_death_player_died)
 	
-	# Connect to damage events for kill tracking
-	EventBus.player_damage_reported.connect(_on_player_damage_for_kills)
+	# Connect to kill events for kill tracking (simplified)
+	EventBus.player_killed_by.connect(_on_player_killed_by)
 	
 	# Show player HUD using UIManager
 	var player_data_array: Array[PlayerData] = []
 	for player_data in GameManager.players.values():
 		player_data_array.append(player_data)
 	UIManager.show_game_hud(player_data_array)
+	
+	# Connect HUD to VictoryConditionManager for kill tracking (new)
+	await get_tree().process_frame  # Wait for HUD to be ready
+	_connect_hud_to_victory_manager()
 	
 	Logger.system("SuddenDeathMinigame initialized with projectile weapon system", "SuddenDeathMinigame")
 
@@ -357,28 +364,78 @@ func _on_sudden_death_player_died(player_id: int) -> void:
 		# Update leadership tracking since player elimination might change leader
 		update_leadership_tracking()
 
-## Track kills when damage results in death
-func _on_player_damage_for_kills(victim_id: int, attacker_id: int, damage: int, source_name: String) -> void:
-	# Only track kills from other players (not self-damage or environmental)
-	if attacker_id == -1 or attacker_id == victim_id:
+## Handle kill tracking (simplified - no timing windows)
+func _on_player_killed_by(victim_id: int, killer_id: int, source_name: String) -> void:
+	Logger.debug("⚔️ SUDDEN DEATH: Kill event received - victim=" + str(victim_id) + " killer=" + str(killer_id) + " source=" + source_name, "SuddenDeathMinigame")
+	
+	# Only track kills from actual players (not environment)
+	if killer_id == -1:
+		Logger.combat("⚔️ Player " + str(victim_id) + " died from " + source_name + " (environmental) - no kill awarded", "SuddenDeathMinigame")
 		return
 	
-	# Check if this damage will result in death
-	var victim_player: BasePlayer = null
-	if player_spawner:
-		victim_player = player_spawner.get_player(victim_id)
+	Logger.combat("⚔️ ✅ PROCESSING KILL: Player " + str(killer_id) + " killed Player " + str(victim_id) + " with " + source_name, "SuddenDeathMinigame")
 	
-	if victim_player and victim_player.health:
-		# Check if victim will die from this damage
-		var victim_health = victim_player.health.current_health
-		if victim_health <= damage:
-			# Award a kill to the attacker
-			if victory_condition_manager:
-				victory_condition_manager.add_score(attacker_id, 1)
-				var attacker_data = GameManager.get_player_data(attacker_id)
-				var victim_data = GameManager.get_player_data(victim_id)
-				if attacker_data and victim_data:
-					Logger.combat("Kill credited: " + attacker_data.player_name + " eliminated " + victim_data.player_name, "SuddenDeathMinigame")
+	# Award the kill to the killer
+	if victory_condition_manager:
+		Logger.debug("⚔️ Adding score to victory manager for player " + str(killer_id), "SuddenDeathMinigame")
+		victory_condition_manager.add_score(killer_id, 1)
+		
+		# Update local kill tracking
+		var old_kills = player_kills.get(killer_id, 0)
+		player_kills[killer_id] = old_kills + 1
+		var new_kills = player_kills[killer_id]
+		
+		Logger.combat("⚔️ ✅ KILL CREDITED: Player " + str(killer_id) + " kills: " + str(old_kills) + " -> " + str(new_kills), "SuddenDeathMinigame")
+		
+		var killer_data = GameManager.get_player_data(killer_id)
+		var victim_data = GameManager.get_player_data(victim_id)
+		if killer_data and victim_data:
+			Logger.combat("⚔️ Kill credited: " + killer_data.player_name + " eliminated " + victim_data.player_name + " with " + source_name, "SuddenDeathMinigame")
+			
+			# Kill feed automatically shows via EventBus.player_killed_by signal
+		else:
+			Logger.error("⚔️ ❌ Failed to get player data for kill logging - killer=" + str(killer_id) + " victim=" + str(victim_id), "SuddenDeathMinigame")
+		
+		# Log the new kill count
+		Logger.combat("⚔️ Player " + str(killer_id) + " now has " + str(new_kills) + " kills", "SuddenDeathMinigame")
+	else:
+		Logger.error("⚔️ ❌ No victory_condition_manager - kill not credited!", "SuddenDeathMinigame")
+
+## Override base class kill tracking to use simplified local tracking
+func _get_player_kills(player_id: int) -> int:
+	return player_kills.get(player_id, 0)
+
+## Connect PlayerHUD to VictoryConditionManager for kill tracking (new)
+func _connect_hud_to_victory_manager() -> void:
+	Logger.system("Attempting to connect PlayerHUD to VictoryConditionManager...", "SuddenDeathMinigame")
+	
+	if not victory_condition_manager:
+		Logger.warning("No VictoryConditionManager available for HUD connection", "SuddenDeathMinigame")
+		return
+	else:
+		Logger.system("VictoryConditionManager found: " + str(victory_condition_manager), "SuddenDeathMinigame")
+	
+	# Get the current HUD from UIManager
+	var hud_controller = UIManager.get_hud_controller()
+	if not hud_controller:
+		Logger.warning("No HUD controller available", "SuddenDeathMinigame")
+		return
+	else:
+		Logger.system("HUD controller found: " + str(hud_controller), "SuddenDeathMinigame")
+	
+	var player_hud = hud_controller.get_current_hud()
+	if not player_hud:
+		Logger.warning("No PlayerHUD available for connection", "SuddenDeathMinigame")
+		return
+	else:
+		Logger.system("PlayerHUD found: " + str(player_hud), "SuddenDeathMinigame")
+	
+	# Connect the VictoryConditionManager's score_updated signal to the HUD
+	if not victory_condition_manager.score_updated.is_connected(player_hud._on_player_kills_changed):
+		victory_condition_manager.score_updated.connect(player_hud._on_player_kills_changed)
+		Logger.system("✅ Connected PlayerHUD to VictoryConditionManager for kill tracking", "SuddenDeathMinigame")
+	else:
+		Logger.system("✅ PlayerHUD already connected to VictoryConditionManager", "SuddenDeathMinigame")
 
 ## Clean up Sudden Death specific connections
 func _on_physics_end(result: MinigameResult) -> void:
@@ -386,12 +443,15 @@ func _on_physics_end(result: MinigameResult) -> void:
 	if EventBus.player_died.is_connected(_on_sudden_death_player_died):
 		EventBus.player_died.disconnect(_on_sudden_death_player_died)
 	
+	# Disconnect from kill tracking events (simplified)
+	if EventBus.player_killed_by.is_connected(_on_player_killed_by):
+		EventBus.player_killed_by.disconnect(_on_player_killed_by)
+	
 	# Clear respawn blocks
 	if respawn_manager:
 		respawn_manager.clear_all_respawn_blocks()
 	
-	# Disconnect from damage events
-	if EventBus.player_damage_reported.is_connected(_on_player_damage_for_kills):
-		EventBus.player_damage_reported.disconnect(_on_player_damage_for_kills)
+	# Clear kill tracking data (simplified)
+	player_kills.clear()
 	
-	Logger.system("SuddenDeathMinigame cleanup completed with projectile weapon system", "SuddenDeathMinigame") 
+	Logger.system("SuddenDeathMinigame cleanup completed with simplified kill tracking", "SuddenDeathMinigame") 

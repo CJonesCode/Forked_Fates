@@ -224,7 +224,33 @@ static func create_item(item_id: String) -> BaseItem:
     return config.item_scene.instantiate()
 ```
 
-### **4. UI Architecture (Factory + Manager Pattern)**
+### **4. Unified Damage System**
+
+All damage uses a single method with sensible defaults for any source type.
+
+```gdscript
+# UNIFIED: Single damage method for all sources (weapons, items, environmental)
+func take_damage(damage: int, source: Node = null, attacker_id: int = -1, source_name: String = "Environmental") -> void:
+    # Always preserves attribution with sensible defaults
+    # attacker_id = -1: environmental damage
+    # source_name = "Environmental": default for unknown sources
+
+# Apply damage with attribution (bullets, bats, thrown objects)
+target_player.health.take_damage(damage, self, attacker_id, "Bat")
+target_player.health.take_damage(damage, self, shooter_id, "Bullet") 
+target_player.health.take_damage(damage, self, thrower_id, "Thrown Crate")
+
+# Environmental damage (lava, poison, traps)
+player.health.take_damage(damage, self, -1, "Lava")
+player.health.take_damage(damage, self, -1, "Poison")
+
+# Minigame damage handling preserves attribution
+func _on_damage_reported(victim_id: int, attacker_id: int, damage: int, source_name: String, victim_data: PlayerData) -> void:
+    var victim_player: BasePlayer = player_spawner.get_player(victim_id)
+    victim_player.health.take_damage(damage, null, attacker_id, source_name)  # Preserves attribution
+```
+
+### **5. UI Architecture (Factory + Manager Pattern)**
 
 **Design Philosophy**: Split UI responsibilities for clean separation of concerns
 - **UIFactory**: Creates UI elements with consistent styling and configuration
@@ -611,6 +637,7 @@ steam_lobby._on_host_button_pressed()  # Not manual RetryHandler creation!
 - **Leave temporary test files** - Always clean up test scenes/scripts after validation
 - **Bypass user interaction flows in tests** - Test the exact path users take, not simplified versions
 - **Implement cleanup timing manually in individual minigames** - BaseMinigame.abort_minigame() handles this automatically
+- **Use multiple damage methods** - Use unified `take_damage()` method for all sources with proper attribution
 - Use `super().method()` syntax - use `super.method()` in Godot 4.x
 - Create inner classes that are referenced before definition
 - Add conditional checks for static methods with `has_method()`
@@ -643,6 +670,7 @@ steam_lobby._on_host_button_pressed()  # Not manual RetryHandler creation!
 - **Load weapon properties from ItemConfig** - Call `_load_weapon_config()` in `_ready()`, override `_apply_weapon_config()` for specialized properties
 - **Use EventBus for weapon positioning** - Request position via `EventBus.weapon_position_requested.emit()`, respond in WeaponComponent
 - **Test .tres file changes** - Modify weapon configs and see immediate gameplay effects
+- **Use unified damage method** - `player.health.take_damage(damage, source, attacker_id, source_name)` for all damage sources
 - Use `super.method_name()` for parent method calls
 - Use Dictionary structures for complex data instead of inner classes
 - Call static methods directly without conditional checks
@@ -761,6 +789,11 @@ func _request_position_update() -> void:
     var holder_id: int = holder.player_data.player_id
     EventBus.weapon_position_requested.emit(weapon_id, holder_id)
 
+# Unified damage application for all item types
+target_player.health.take_damage(damage, self, attacker_id, "Bat")
+target_player.health.take_damage(damage, self, shooter_id, "Bullet")
+target_player.health.take_damage(damage, self, thrower_id, "Thrown Pistol")
+
 # Proper bullet creation and pooling
 var bullet: Node = PoolManager.get_item("bullet")
 var bullet_obj: Bullet = bullet as Bullet
@@ -837,16 +870,16 @@ fire_sound = ExtResource("pistol_sound")
 
 ### **Universal Damage System Patterns**
 ```gdscript
-# Reporting damage from ANY source (weapons, hazards, mechanics)
+# Reporting damage from ANY source (items, hazards, mechanics)
 EventBus.report_player_damage(victim_id, attacker_id, damage_amount, "Bullet")
 EventBus.report_player_damage(victim_id, -1, damage_amount, "Lava")  # Environmental
 EventBus.report_player_damage(victim_id, other_player_id, 1, "Jump")  # Player action
 
 # Implementing damage handling in minigames (override virtual method)
 func _on_damage_reported(victim_id: int, attacker_id: int, damage: int, source_name: String, victim_data: PlayerData) -> void:
-    # Physics games: Apply to health
+    # Physics games: Apply to health with proper attribution
     var player = player_spawner.get_player(victim_id)
-    player.take_damage(damage)
+    player.health.take_damage(damage, null, attacker_id, source_name)  # Preserves kill tracking
     
     # Collection games: Drop items/points
     var collection_player = get_collection_player(victim_id) 
@@ -857,7 +890,7 @@ func _on_damage_reported(victim_id: int, attacker_id: int, damage: int, source_n
     vehicle.apply_damage_slowdown(damage)
     
     # Turn-based games: Queue for later
-    damage_queue.append({"victim": victim_id, "damage": damage})
+    damage_queue.append({"victim": victim_id, "damage": damage, "attacker": attacker_id, "source": source_name})
 
 # BaseMinigame automatically handles: Signal connection, player lookup, cleanup
 # Each minigame type only implements: Damage effect specific to their game
@@ -924,6 +957,22 @@ EventBus.emit_player_lives_changed(player_id, new_lives) # Update UI display
 ```
 
 ## Recent Architectural Changes
+
+### **Unified Damage System - Single Method Architecture**
+**Problem**: Dual take_damage methods created architectural confusion and race conditions
+```
+take_damage(damage_amount, source, attacker_id, weapon_name)  # "Generic" method
+take_damage_from_player(damage, attacker_id, weapon_name, source)  # "Explicit" method
+```
+
+**Solution**: Single unified method with sensible defaults for all damage sources
+- **Eliminated dual methods** - One `take_damage()` method for all sources
+- **Universal attribution** - Always tracks attacker with defaults for environmental damage
+- **Source-agnostic naming** - "source_name" instead of "weapon_name" (supports poison, crates, etc.)
+- **Fixed PhysicsMinigame bug** - No more attribution-stripping calls
+- **Consistent API** - All damage calls preserve kill tracking information
+
+**Result**: **Reliable kill attribution** - bats, bullets, thrown objects all credit kills properly + cleaner architecture
 
 ### **ObjectIndicator System Generalization - Universal Visual Indicators**
 **Problem**: StatusIndicator system was player-specific and had crown alignment issues
@@ -1249,7 +1298,7 @@ if not signal_name.is_connected(callback_method):
    - **ID-based architecture**: `var player_id: int` + `PlayerManager.get_player(id)` for cross-system references
    - **Weapon pickup**: `weapon.pickup_by_id(player.player_data.player_id)` not `weapon.pickup(player)`
    - **Player registration**: `PlayerManager.register_player(player_data.player_id, self)` in `BasePlayer._ready()`
-   - Universal damage: `EventBus.report_player_damage()` from sources, `_on_damage_reported()` in minigames
+   - Unified damage: `player.health.take_damage(damage, source, attacker_id, source_name)` for all sources
    - UI creation: `UIFactory.create_*()` → `UIManager.show_*()` for all UI elements
    - `Time.get_unix_time_from_system()` for timestamps
    - `_exit_tree()` for cleanup, signal disconnection, resource freeing
