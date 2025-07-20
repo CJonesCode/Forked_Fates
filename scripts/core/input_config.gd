@@ -3,7 +3,7 @@ extends Resource
 
 ## Input configuration resource for flexible player input mapping
 ## Supports different input devices and customizable key bindings
-## Pure throwing-centric weapon controls: fire/throw/pickup
+## Momentum-based weapon controls: fire/momentum-throw/pickup
 
 enum InputDevice {
 	KEYBOARD_WASD,
@@ -21,16 +21,16 @@ enum InputDevice {
 @export var move_right_action: String = "move_right"
 @export var jump_action: String = "jump"
 
-# Throwing-centric weapon actions
+# Momentum-based weapon actions
 @export var fire_action: String = "fire"          # Fire held weapon
-@export var throw_action: String = "throw"        # Throw held weapon as projectile
+@export var throw_action: String = "throw"        # Throw held weapon (momentum-based: still=drop, moving=weaponize)
 @export var pickup_action: String = "pickup"      # Pick up nearby weapon
 
 ## Create default input configurations for each player
 static func create_default_configs() -> Array[InputConfig]:
 	var configs: Array[InputConfig] = []
 	
-	# Player 1 - WASD (throwing-centric controls)
+	# Player 1 - WASD (momentum-based controls)
 	var p1_config = InputConfig.new()
 	p1_config.device_type = InputDevice.KEYBOARD_WASD
 	p1_config.move_left_action = "p1_move_left"
@@ -41,7 +41,7 @@ static func create_default_configs() -> Array[InputConfig]:
 	p1_config.pickup_action = "p1_pickup"
 	configs.append(p1_config)
 	
-	# Player 2 - Arrow Keys (throwing-centric controls)
+	# Player 2 - Arrow Keys (momentum-based controls)
 	var p2_config = InputConfig.new()
 	p2_config.device_type = InputDevice.KEYBOARD_ARROWS
 	p2_config.move_left_action = "p2_move_left"
@@ -52,7 +52,7 @@ static func create_default_configs() -> Array[InputConfig]:
 	p2_config.pickup_action = "p2_pickup"
 	configs.append(p2_config)
 	
-	# Player 3 - IJKL (throwing-centric controls)
+	# Player 3 - IJKL (momentum-based controls)
 	var p3_config = InputConfig.new()
 	p3_config.device_type = InputDevice.KEYBOARD_IJKL
 	p3_config.move_left_action = "p3_move_left"
@@ -63,7 +63,7 @@ static func create_default_configs() -> Array[InputConfig]:
 	p3_config.pickup_action = "p3_pickup"
 	configs.append(p3_config)
 	
-	# Player 4 - Numpad (throwing-centric controls)
+	# Player 4 - Numpad (momentum-based controls)
 	var p4_config = InputConfig.new()
 	p4_config.device_type = InputDevice.KEYBOARD_NUMPAD
 	p4_config.move_left_action = "p4_move_left"

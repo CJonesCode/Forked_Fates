@@ -52,6 +52,10 @@ func _ready() -> void:
 	# Connect to EventBus weapon positioning signals
 	_connect_positioning_signals()
 	
+	# Connect collision signal for thrown weapon damage
+	if not body_shape_entered.is_connected(_on_thrown_weapon_collision):
+		body_shape_entered.connect(_on_thrown_weapon_collision)
+	
 	Logger.system("BaseWeapon initialized: " + item_name, "BaseWeapon")
 
 ## Update weapon position via EventBus when held
@@ -136,7 +140,20 @@ func _detach_weapon_from_player(player: BasePlayer) -> void:
 ## Enable projectile mode
 func _enable_projectile_mode() -> void:
 	is_thrown_projectile = true
-	CollisionLayers.setup_projectile(self)
+	
+	# Explicit collision setup for thrown weapons (ensure it works like bullets)
+	collision_layer = CollisionLayers.Layer.PROJECTILES  # Layer 8
+	collision_mask = CollisionLayers.Mask.PROJECTILE_TARGETS  # 35 (includes PLAYERS)
+	
+	# Force enable contact monitoring (critical for RigidBody2D collision detection)
+	contact_monitor = true
+	max_contacts_reported = 10
+	
+	# Ensure collision signal is connected for projectile mode
+	if not body_shape_entered.is_connected(_on_thrown_weapon_collision):
+		body_shape_entered.connect(_on_thrown_weapon_collision)
+	
+	Logger.combat("Weapon " + item_name + " enabled as projectile - ready for collision detection", "BaseWeapon")
 
 ## Load weapon configuration from ItemConfig .tres files
 func _load_weapon_config() -> void:
@@ -265,38 +282,72 @@ func get_weapon_info() -> Dictionary:
 		"max_ricochets": max_ricochets
 	}
 
-## Throw weapon as projectile (Duck Game style mechanics)
+## Unified throw/drop system - force determines if weaponized or gentle drop
 func throw_weapon(direction: Vector2, force: float, thrower_id: int) -> bool:
 	if not is_held or not holder:
 		return false
 	
-	# Calculate throw damage based on base damage and multiplier
-	throw_damage = int(base_damage * throw_damage_multiplier)
+	# CRITICAL: Detach weapon from player first (shared logic)
+	_detach_from_player()
 	
-	# Set projectile state
-	is_thrown_projectile = true
-	thrown_by_id = thrower_id
-	ricochet_count = 0
-	
-	# Enable projectile collision mode
-	_enable_projectile_mode()
-	
-	# Apply throw force
+	# Force threshold for weaponization
+	var weaponize_threshold: float = 200.0
 	var clamped_force = min(force, max_throw_force)
+	
+	if clamped_force > weaponize_threshold:
+		# HIGH FORCE: Weaponized projectile mode
+		is_thrown_projectile = true
+		thrown_by_id = thrower_id
+		ricochet_count = 0
+		throw_damage = int(base_damage * throw_damage_multiplier)
+		
+		# Enable projectile collision mode (can damage players)
+		_enable_projectile_mode()
+		
+		Logger.combat("Weapon " + item_name + " WEAPONIZED with force " + str(clamped_force) + " (damage: " + str(throw_damage) + ")", "BaseWeapon")
+	else:
+		# LOW FORCE: Gentle drop mode
+		is_thrown_projectile = false
+		thrown_by_id = -1
+		throw_damage = 0
+		
+		# Use normal item collision (can be picked up, won't damage)
+		CollisionLayers.setup_item(self)
+		
+		# Reset visual orientation for dropped items (face right, upright)
+		rotation = 0.0
+		scale.x = abs(scale.x)
+		
+		Logger.pickup("Weapon " + item_name + " gently dropped with force " + str(clamped_force), "BaseWeapon")
+	
+	# Apply physics (shared logic)
 	linear_velocity = direction.normalized() * clamped_force
 	
-	# Release from holder
+	# Release from holder (shared logic)
 	is_held = false
 	holder = null
-	
-	# Re-enable physics
 	freeze = false
 	
-	# Emit throw signal
+	# Set pickup cooldown timer to prevent immediate re-pickup
+	last_use_time = Time.get_unix_time_from_system()
+	
+	# Emit appropriate signal
 	weapon_thrown.emit(thrower_id)
 	
-	Logger.combat("Weapon " + item_name + " thrown with force " + str(clamped_force) + " (damage: " + str(throw_damage) + ")", "BaseWeapon")
 	return true
+
+## Convenience method: Gentle drop (backwards compatibility)
+func drop(drop_velocity: Vector2 = Vector2.ZERO) -> bool:
+	var holder_id = holder.player_data.player_id if holder and holder.player_data else -1
+	var direction = drop_velocity.normalized() if drop_velocity.length() > 0.1 else Vector2.DOWN
+	var force = drop_velocity.length() if drop_velocity.length() > 10.0 else 50.0  # Gentle force
+	
+	return throw_weapon(direction, force, holder_id)
+
+## Convenience method: Weaponized throw (backwards compatibility)  
+func throw_as_projectile(direction: Vector2, force: float, thrower_id: int) -> bool:
+	var weaponized_force = max(force, 250.0)  # Ensure it's weaponized
+	return throw_weapon(direction, weaponized_force, thrower_id)
 
 ## Connect to EventBus weapon positioning signals
 func _connect_positioning_signals() -> void:
@@ -344,9 +395,141 @@ func _on_weapon_facing_provided(weapon_id: String, facing: int) -> void:
 		else:
 			scale.x = -abs(scale.x)  # Face left
 
+## Handle collision when weapon is thrown as projectile
+func _on_thrown_weapon_collision(body_rid: RID, body: Node, body_shape_index: int, local_shape_index: int) -> void:
+	# Only handle collisions when thrown as projectile
+	if not is_thrown_projectile:
+		return
+	
+	Logger.combat("Thrown " + item_name + " collided with: " + body.name + " (" + body.get_class() + ")", "BaseWeapon")
+	
+	# Don't hit the thrower immediately
+	if body is BasePlayer:
+		var player: BasePlayer = body as BasePlayer
+		if player.player_data and player.player_data.player_id == thrown_by_id:
+			Logger.debug("Ignoring collision with thrower", "BaseWeapon")
+			return
+		
+		# Hit player with thrown weapon
+		_hit_player_with_thrown_weapon(player)
+		return
+	
+	# Handle environment/wall hits for thrown weapons
+	if body.is_in_group("walls") or body.is_in_group("environment"):
+		_hit_environment_with_thrown_weapon(body)
+		return
+	
+	# Other collisions - just stop the weapon
+	Logger.debug("Thrown weapon hit other object: " + body.name, "BaseWeapon")
+	_stop_thrown_weapon()
+
+## Handle hitting a player with thrown weapon
+func _hit_player_with_thrown_weapon(player: BasePlayer) -> void:
+	var thrower: BasePlayer = PlayerManager.get_player(thrown_by_id)
+	if not player:
+		_stop_thrown_weapon()
+		return
+	
+	# Report damage through universal damage system
+	var player_data: PlayerData = player.get_player_data()
+	var thrower_data: PlayerData = thrower.player_data if thrower else null
+	if player_data and thrower_data:
+		EventBus.report_player_damage(
+			player_data.player_id,
+			thrower_data.player_id,
+			throw_damage,
+			"Thrown " + item_name
+		)
+		
+		var player_name: String = player_data.player_name
+		var thrower_name: String = thrower_data.player_name
+		Logger.combat("Thrown " + item_name + " from " + thrower_name + " hit " + player_name + " for " + str(throw_damage) + " damage", "BaseWeapon")
+	else:
+		Logger.warning("Failed to get player/thrower data for damage reporting", "BaseWeapon")
+	
+	# Apply knockback/ragdoll force
+	_apply_thrown_weapon_knockback(player)
+	
+	# Stop the thrown weapon
+	_stop_thrown_weapon()
+
+## Apply knockback/ragdoll from thrown weapon impact
+func _apply_thrown_weapon_knockback(target: BasePlayer) -> void:
+	if not target:
+		return
+	
+	# Calculate impact direction based on weapon velocity
+	var impact_direction: Vector2 = linear_velocity.normalized()
+	var impact_force: float = linear_velocity.length()
+	
+	# Apply knockback based on impact force
+	var knockback_force: float = impact_force * 0.5  # Scale down impact
+	target.velocity += impact_direction * knockback_force
+	
+	# Check if impact is strong enough to cause ragdoll  
+	var ragdoll_threshold: float = 250.0  # Lowered threshold for momentum-based throwing
+	
+	if impact_force > ragdoll_threshold:
+		var ragdoll_component: RagdollComponent = target.get_component(RagdollComponent)
+		if ragdoll_component:
+			ragdoll_component.enter_ragdoll_state()
+			Logger.combat("Thrown " + item_name + " caused ragdoll on " + target.player_data.player_name + " (impact: " + str(impact_force) + ")", "BaseWeapon")
+		else:
+			Logger.warning("No ragdoll component found on " + target.player_data.player_name, "BaseWeapon")
+	
+	Logger.combat("Applied thrown weapon knockback: " + str(knockback_force) + " force", "BaseWeapon")
+
+## Handle thrown weapon hitting environment
+func _hit_environment_with_thrown_weapon(surface: Node) -> void:
+	Logger.debug("Thrown weapon hit environment: " + surface.name, "BaseWeapon")
+	
+	# Check for ricochet
+	if can_ricochet and ricochet_count < max_ricochets:
+		_handle_thrown_weapon_ricochet(surface)
+	else:
+		_stop_thrown_weapon()
+
+## Handle thrown weapon ricochet
+func _handle_thrown_weapon_ricochet(surface: Node) -> void:
+	ricochet_count += 1
+	
+	# Calculate surface normal (simplified)
+	var hit_point = global_position
+	var surface_position = surface.global_position
+	var relative_pos = hit_point - surface_position
+	
+	var surface_normal: Vector2
+	if abs(relative_pos.x) > abs(relative_pos.y):
+		surface_normal = Vector2(sign(relative_pos.x), 0)  # Vertical surface
+	else:
+		surface_normal = Vector2(0, sign(relative_pos.y))  # Horizontal surface
+	
+	# Reflect velocity and reduce speed
+	linear_velocity = linear_velocity.bounce(surface_normal) * 0.7
+	throw_damage = int(throw_damage * 0.8)  # Reduce damage on ricochet
+	
+	Logger.debug("Thrown weapon ricocheted off " + surface.name + " (" + str(ricochet_count) + "/" + str(max_ricochets) + ")", "BaseWeapon")
+
+## Stop thrown weapon movement and return to normal item state
+func _stop_thrown_weapon() -> void:
+	is_thrown_projectile = false
+	thrown_by_id = -1
+	linear_velocity = Vector2.ZERO
+	angular_velocity = 0.0
+	
+	# Re-enable normal item physics and collision
+	CollisionLayers.setup_item(self)
+	
+	Logger.debug("Thrown weapon stopped and returned to item state", "BaseWeapon")
+
 ## Cleanup on exit
 func _exit_tree() -> void:
 	# Disconnect positioning signals
 	_disconnect_positioning_signals()
+	
+	# Disconnect collision signal
+	if body_shape_entered.is_connected(_on_thrown_weapon_collision):
+		body_shape_entered.disconnect(_on_thrown_weapon_collision)
+	
 	# Basic cleanup
 	super() 

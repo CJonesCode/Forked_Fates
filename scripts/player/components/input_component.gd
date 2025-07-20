@@ -3,13 +3,13 @@ extends BaseComponent
 
 ## Input processing and mapping component
 ## Handles input configuration and translates input to game actions
-## Pure throwing-centric weapon controls
+## Momentum-based weapon controls
 
-# Input signals - throwing-centric style
+# Input signals - momentum-based throwing
 signal movement_input_changed(movement: Vector2)
 signal jump_input_pressed()
 signal fire_input_pressed()       # Fire held weapon
-signal throw_input_pressed()      # Throw held weapon as projectile
+signal throw_input_pressed()      # Throw/drop (momentum-based force)
 signal pickup_input_pressed()     # Pick up nearby weapon
 
 # Input configuration
@@ -68,7 +68,7 @@ func _gather_input() -> void:
 		current_movement = new_movement
 		movement_input_changed.emit(current_movement)
 
-## Process button press actions - throwing-centric style
+## Process button press actions - momentum-based throwing
 func _process_input_actions() -> void:
 	# Handle jump input
 	if InputMap.has_action(input_config.jump_action) and Input.is_action_just_pressed(input_config.jump_action):
@@ -78,7 +78,7 @@ func _process_input_actions() -> void:
 	if InputMap.has_action(input_config.fire_action) and Input.is_action_just_pressed(input_config.fire_action):
 		fire_input_pressed.emit()
 	
-	# Handle throw input (projectile action - throw weapon)
+	# Handle throw input (momentum determines force)
 	if InputMap.has_action(input_config.throw_action) and Input.is_action_just_pressed(input_config.throw_action):
 		throw_input_pressed.emit()
 	
@@ -128,7 +128,7 @@ func _validate_input_config() -> void:
 	if not InputMap.has_action(input_config.jump_action):
 		missing_actions.append(input_config.jump_action)
 	
-	# Check projectile weapon actions
+	# Check momentum-based weapon actions
 	if not InputMap.has_action(input_config.fire_action):
 		missing_actions.append(input_config.fire_action)
 	if not InputMap.has_action(input_config.throw_action):

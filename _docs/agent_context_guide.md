@@ -206,7 +206,7 @@ func _on_weapon_position_requested(weapon_id: String, holder_id: int) -> void:
 ```gdscript
 # Pistol shooting with pooled bullets
 func _shoot() -> bool:
-    var bullet: Node = PoolManager.get_bullet()
+    var bullet: Node = PoolManager.get_item("bullet")
     var bullet_obj: Bullet = bullet as Bullet
     bullet_obj.is_pooled = true  # Critical for pool return
     
@@ -756,7 +756,7 @@ func _request_position_update() -> void:
     EventBus.weapon_position_requested.emit(weapon_id, holder_id)
 
 # Proper bullet creation and pooling
-var bullet: Node = PoolManager.get_bullet()
+var bullet: Node = PoolManager.get_item("bullet")
 var bullet_obj: Bullet = bullet as Bullet
 bullet_obj.is_pooled = true
 bullet_obj.initialize(direction, position, holder_id)  # Use ID
@@ -1067,7 +1067,7 @@ func _on_my_minigame_player_died(player_id: int) -> void:
 ```gdscript
 # Proper bullet pooling with state management
 func _shoot() -> bool:
-    var bullet: Node = PoolManager.get_bullet()
+    var bullet: Node = PoolManager.get_item("bullet")
     var bullet_obj: Bullet = bullet as Bullet
     bullet_obj.is_pooled = true  # CRITICAL: Mark as pooled
     

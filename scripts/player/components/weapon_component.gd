@@ -119,7 +119,7 @@ func fire_held_weapon() -> bool:
 	
 	return fired_successfully
 
-## Throw currently held weapon as projectile (projectile system core action)
+## Throw currently held weapon (momentum-based force)
 func throw_held_weapon(force: float = 0.0) -> bool:
 	if held_weapon == null:
 		return false
@@ -127,7 +127,7 @@ func throw_held_weapon(force: float = 0.0) -> bool:
 	var weapon: BaseWeapon = held_weapon
 	var player_name: String = player.player_data.player_name if player.player_data else "Unknown Player"
 	
-	# Use default force if none specified
+	# Use provided force (calculated from momentum) or fallback to default
 	var throw_force: float = force if force > 0.0 else default_throw_force
 	
 	# Calculate throw direction based on player movement and facing

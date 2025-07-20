@@ -120,33 +120,34 @@ func pickup(player: BasePlayer) -> bool:
 	Logger.pickup("DEBUG: " + item_name + " pickup complete - is_held=" + str(is_held) + " visible=" + str(visible), "BaseItem")
 	return true
 
-## Drop this item
+## Unified throw/drop system for base items (weapons override with enhanced functionality)
 func drop(drop_velocity: Vector2 = Vector2.ZERO) -> bool:
 	if not is_held or not holder:
 		return false
 	
 	var dropping_player = holder
-	
-	# Detach from player BEFORE resetting holder
 	var dropping_player_name: String = dropping_player.player_data.player_name if dropping_player.player_data else "Unknown Player"
-	Logger.pickup("Dropping " + item_name + " from " + dropping_player_name, "BaseItem")
+	
+	# Detach from player (shared logic)
+	Logger.pickup("Releasing " + item_name + " from " + dropping_player_name, "BaseItem")
 	_detach_from_player()
 	
-	# Reset state
+	# Reset state (shared logic)
 	is_held = false
 	holder = null
 	last_use_time = Time.get_unix_time_from_system()
 	
-	# Reset visual orientation to default (facing right)
+	# Items are always gentle drops (no weaponization for base items)
+	# Reset visual orientation to default (facing right, upright)
 	scale.x = abs(scale.x)
-	rotation = 0.0  # Reset rotation when dropped to be upright
+	rotation = 0.0
 	
-	# Re-enable physics
+	# Re-enable normal item physics
 	freeze = false
 	CollisionLayers.add_layer(self, CollisionLayers.Layer.ITEMS)
 	CollisionLayers.add_mask(self, CollisionLayers.Mask.ITEMS_INTERACTION)
 	
-	# Apply drop velocity
+	# Apply drop velocity (gentle by nature)
 	linear_velocity = drop_velocity
 	
 	# Emit signals
@@ -154,7 +155,6 @@ func drop(drop_velocity: Vector2 = Vector2.ZERO) -> bool:
 	var dropping_player_id = dropping_player.player_data.player_id if dropping_player.player_data else -1
 	EventBus.emit_item_dropped(dropping_player_id, item_name)
 	
-	# Use the same variable we defined earlier
 	Logger.pickup(dropping_player_name + " dropped " + item_name, "BaseItem")
 	return true
 

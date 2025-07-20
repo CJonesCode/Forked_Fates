@@ -25,7 +25,8 @@ var max_penetrations: int = 0
 # Component references
 @onready var sprite: Sprite2D = $Sprite2D
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
-@onready var trail_particles: CPUParticles2D = $TrailParticles
+# Note: TrailParticles node doesn't exist in scene - skip for now
+var trail_particles: CPUParticles2D = null
 
 func _ready() -> void:
 	# Setup physics
@@ -37,9 +38,9 @@ func _ready() -> void:
 	# Setup collision layers
 	CollisionLayers.setup_bullet(self)
 	
-	# Connect collision signal safely
-	if not body_entered.is_connected(_on_body_shape_entered):
-		body_entered.connect(_on_body_shape_entered)
+	# Connect collision signal safely - use body_shape_entered for RigidBody2D
+	if not body_shape_entered.is_connected(_on_body_shape_entered):
+		body_shape_entered.connect(_on_body_shape_entered)
 	
 	# Start trail particles if available
 	if trail_particles:
@@ -73,11 +74,9 @@ func initialize(direction: Vector2, spawn_position: Vector2, bullet_shooter_id: 
 	# Set collision exclusions - don't hit shooter initially
 	var shooter: BasePlayer = PlayerManager.get_player(shooter_id)
 	if shooter:
-		# Add shooter to excluded bodies to prevent immediate collision
-		var shooter_collision = shooter.get_node("CollisionShape2D") as CollisionShape2D
-		if shooter_collision:
-			var shooter_rid = shooter_collision.get_rid()
-			# Note: This is a simplified exclusion - proper implementation would need collision layers
+		# Note: In Godot 4.x, we handle shooter exclusion via ID check in collision handler
+		# No need for RID-based exclusion since we check shooter_id in _on_body_shape_entered
+		Logger.debug("Bullet initialized with shooter exclusion for player ID: " + str(shooter_id), "Bullet")
 	
 	# Set damage from shooter's weapon if available
 	var weapon_component: WeaponComponent = shooter.weapon if shooter else null
@@ -205,11 +204,15 @@ func _destroy_bullet() -> void:
 	if trail_particles:
 		trail_particles.emitting = false
 	
-	# Return to pool or destroy
+	# Return to pool or destroy (deferred to avoid physics callback issues)
 	if is_pooled:
-		PoolManager.return_bullet(self)
+		call_deferred("_deferred_return_to_pool")
 	else:
 		queue_free()
+
+## Deferred method to return bullet to pool (avoids physics callback issues)
+func _deferred_return_to_pool() -> void:
+	PoolManager.return_item(self, "bullet")
 
 ## Reset bullet for object pooling
 func reset_for_pool() -> void:
@@ -254,9 +257,9 @@ func activate_from_pool() -> void:
 	if trail_particles:
 		trail_particles.emitting = true
 	
-	# Ensure signal is connected
-	if not body_entered.is_connected(_on_body_shape_entered):
-		body_entered.connect(_on_body_shape_entered)
+	# Ensure signal is connected - use body_shape_entered for RigidBody2D
+	if not body_shape_entered.is_connected(_on_body_shape_entered):
+		body_shape_entered.connect(_on_body_shape_entered)
 	
 	Logger.debug("Bullet activated from pool", "Bullet")
 

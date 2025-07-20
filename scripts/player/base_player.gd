@@ -112,14 +112,14 @@ func _connect_component_signals() -> void:
 		weapon.nearby_weapons_changed.connect(_on_nearby_weapons_changed)
 		Logger.system("Connected projectile weapon signals for " + player_data.player_name, "BasePlayer")
 	
-	# Throwing-centric input component signals
+	# Momentum-based input component signals  
 	if input:
 		input.movement_input_changed.connect(_on_input_movement_changed)
 		input.jump_input_pressed.connect(_on_input_jump_pressed)
 		input.fire_input_pressed.connect(_on_input_fire_pressed)
 		input.throw_input_pressed.connect(_on_input_throw_pressed)
 		input.pickup_input_pressed.connect(_on_input_pickup_pressed)
-		Logger.system("Connected throwing-centric input signals for " + player_data.player_name, "BasePlayer")
+		Logger.system("Connected momentum-based input signals for " + player_data.player_name, "BasePlayer")
 	
 	# Ragdoll component signals
 	if ragdoll:
@@ -258,11 +258,40 @@ func fire_weapon() -> bool:
 		return weapon.fire_held_weapon()
 	return false
 
-## Throw currently held weapon as projectile
+## Throw currently held weapon with specified force (unified system)
 func throw_weapon(force: float = 0.0) -> bool:
 	if weapon:
 		return weapon.throw_held_weapon(force)
 	return false
+
+## Calculate throw force based on player momentum
+func _calculate_throw_force_from_momentum() -> float:
+	# Get player velocity and movement input
+	var current_velocity = velocity.length()
+	var movement_input = movement.input_vector if movement else Vector2.ZERO
+	var input_magnitude = movement_input.length()
+	
+	# Base force ranges
+	var gentle_drop_force = 50.0     # Standing still
+	var max_throw_force = 500.0      # Full speed movement
+	
+	# Check if player is effectively stationary
+	var velocity_threshold = 50.0    # Below this = considered stationary
+	var input_threshold = 0.1        # Below this = no input
+	
+	if current_velocity < velocity_threshold and input_magnitude < input_threshold:
+		# Standing still = gentle drop
+		return gentle_drop_force
+	else:
+		# Moving = throw with momentum-based force
+		var velocity_factor = min(current_velocity / 300.0, 1.0)  # Normalize to 0-1
+		var input_factor = min(input_magnitude, 1.0)              # Already 0-1
+		
+		# Combine velocity and input for final force
+		var momentum_factor = max(velocity_factor, input_factor * 0.8)  # Input slightly less influential
+		var throw_force = gentle_drop_force + (momentum_factor * (max_throw_force - gentle_drop_force))
+		
+		return throw_force
 
 ## Pick up nearest weapon
 func pickup_weapon() -> bool:
@@ -275,6 +304,8 @@ func get_held_weapon() -> BaseWeapon:
 	if weapon:
 		return weapon.get_held_weapon()
 	return null
+
+# Note: drop_held_item() removed - use throw_weapon() with low force instead
 
 # Component signal handlers
 
@@ -322,7 +353,7 @@ func _on_weapon_fired(weapon_obj: BaseWeapon) -> void:
 func _on_nearby_weapons_changed(nearby_weapons: Array[BaseWeapon]) -> void:
 	Logger.debug(player_data.player_name + " nearby weapons: " + str(nearby_weapons.size()), "BasePlayer")
 
-## Throwing-centric input signal handlers
+## Momentum-based input signal handlers
 func _on_input_movement_changed(movement_input: Vector2) -> void:
 	if movement and current_state == PlayerState.ALIVE:
 		movement.set_input(movement_input, false)  # Jump handled separately
@@ -341,8 +372,9 @@ func _on_input_fire_pressed() -> void:
 
 func _on_input_throw_pressed() -> void:
 	if current_state == PlayerState.ALIVE:
-		# Projectile system: Throw held weapon as projectile
-		throw_weapon()
+		# Calculate force from player momentum
+		var momentum_force = _calculate_throw_force_from_momentum()
+		throw_weapon(momentum_force)
 
 func _on_input_pickup_pressed() -> void:
 	if current_state == PlayerState.ALIVE:

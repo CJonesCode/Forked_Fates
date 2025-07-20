@@ -94,7 +94,7 @@ func _get_fire_direction() -> Vector2:
 ## Spawn a bullet projectile
 func _spawn_bullet(base_direction: Vector2, bullet_index: int) -> void:
 	# Get bullet from pool
-	var bullet: Node = PoolManager.get_bullet()
+	var bullet: Node = PoolManager.get_item("bullet")
 	var bullet_obj = bullet  # Use generic Node to avoid type issues
 	bullet_obj.is_pooled = true
 	
