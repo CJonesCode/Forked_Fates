@@ -133,9 +133,9 @@ func get_thrower() -> BasePlayer:
 
 ## Detach weapon from player (internal helper method)
 func _detach_weapon_from_player(player: BasePlayer) -> void:
-	if player and player.weapon:
-		if player.weapon.held_weapon == self:
-			player.weapon.held_weapon = null
+	if player and player.item:
+		if player.item.get_held_weapon() == self:
+			player.item.held_item = null
 
 ## Enable projectile mode
 func _enable_projectile_mode() -> void:

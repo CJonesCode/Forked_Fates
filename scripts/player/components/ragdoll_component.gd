@@ -71,14 +71,15 @@ func enter_ragdoll_state(disable_auto_recovery: bool = false) -> void:
 	if input_component:
 		input_component.set_input_enabled(false)
 	
-	var inventory_component: InventoryComponent = player.get_component(InventoryComponent)
-	if inventory_component:
-		inventory_component.set_pickup_enabled(false)
-		# Force drop held item with dramatic velocity
-		var drop_velocity: Vector2 = player.velocity * 0.8
-		drop_velocity.y -= 150.0  # Extra upward force for ragdoll drops
-		drop_velocity.x += randf_range(-100.0, 100.0)  # Random horizontal spread
-		inventory_component.force_drop_item(drop_velocity)
+	# Handle items (if player has ItemComponent)
+	var item_component: ItemComponent = player.get_component(ItemComponent)
+	if item_component:
+		item_component.set_pickup_enabled(false)
+		# Force throw held item with dramatic velocity (inherits player velocity + ragdoll physics)
+		var throw_velocity: Vector2 = player.velocity * 0.8
+		throw_velocity.y -= 150.0  # Extra upward force for ragdoll throws
+		throw_velocity.x += randf_range(-100.0, 100.0)  # Random horizontal spread for chaos
+		item_component.force_throw_item(throw_velocity)
 	
 	# Create ragdoll physics body (deferred to avoid physics conflicts)
 	call_deferred("_create_ragdoll_body")
@@ -107,9 +108,10 @@ func exit_ragdoll_state() -> void:
 	if input_component:
 		input_component.set_input_enabled(true)
 	
-	var inventory_component: InventoryComponent = player.get_component(InventoryComponent)
-	if inventory_component:
-		inventory_component.set_pickup_enabled(true)
+	# Re-enable item pickup (if player has ItemComponent)
+	var item_component: ItemComponent = player.get_component(ItemComponent)
+	if item_component:
+		item_component.set_pickup_enabled(true)
 	
 	# Clean up ragdoll body
 	_remove_ragdoll_body()
@@ -262,9 +264,10 @@ func cleanup_ragdoll_state() -> void:
 	if input_component:
 		input_component.set_input_enabled(true)
 	
-	var inventory_component: InventoryComponent = player.get_component(InventoryComponent)
-	if inventory_component:
-		inventory_component.set_pickup_enabled(true)
+	# Re-enable item pickup (if player has ItemComponent)
+	var item_component: ItemComponent = player.get_component(ItemComponent)
+	if item_component:
+		item_component.set_pickup_enabled(true)
 	
 	# Ensure player is visible
 	player.visible = true

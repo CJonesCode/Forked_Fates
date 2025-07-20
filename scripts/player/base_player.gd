@@ -17,10 +17,10 @@ enum PlayerState {
 # Configuration reference
 var game_config: GameConfig
 
-# Core components with strict typing - projectile weapon system
+# Core components with strict typing - universal held object system
 @onready var movement: MovementComponent = $MovementComponent
 @onready var health: HealthComponent = $HealthComponent
-@onready var weapon = $WeaponComponent  # WeaponComponent - avoid circular dependency
+@onready var item: ItemComponent = $ItemComponent  # ItemComponent - universal held objects
 @onready var input: InputComponent = $InputComponent
 @onready var ragdoll: RagdollComponent = $RagdollComponent
 
@@ -104,13 +104,14 @@ func _connect_component_signals() -> void:
 		movement.landed.connect(_on_movement_landed)
 		movement.jumped.connect(_on_movement_jumped)
 	
-	# Projectile weapon component signals
-	if weapon:
-		weapon.weapon_picked_up.connect(_on_weapon_picked_up)
-		weapon.weapon_thrown.connect(_on_weapon_thrown)
-		weapon.weapon_fired.connect(_on_weapon_fired)
-		weapon.nearby_weapons_changed.connect(_on_nearby_weapons_changed)
-		Logger.system("Connected projectile weapon signals for " + player_data.player_name, "BasePlayer")
+	# Universal item component signals
+	if item:
+		item.item_picked_up.connect(_on_item_picked_up)
+		item.item_thrown.connect(_on_item_thrown)
+		item.item_fired.connect(_on_item_fired)
+		item.item_used.connect(_on_item_used)
+		item.nearby_items_changed.connect(_on_nearby_items_changed)
+		Logger.system("Connected universal item signals for " + player_data.player_name, "BasePlayer")
 	
 	# Momentum-based input component signals  
 	if input:
@@ -154,8 +155,8 @@ func _handle_state_transition(old_state: PlayerState, new_state: PlayerState) ->
 func _enter_alive_state() -> void:
 	if input:
 		input.set_input_enabled(true)
-	if weapon:
-		weapon.set_pickup_enabled(true)
+	if item:
+		item.set_pickup_enabled(true)
 
 ## Enter ragdoll state
 func _enter_ragdoll_state() -> void:
@@ -168,15 +169,15 @@ func _enter_dead_state() -> void:
 		ragdoll.enter_death_ragdoll()
 	if input:
 		input.set_input_enabled(false)
-	if weapon:
-		weapon.set_pickup_enabled(false)
+	if item:
+		item.set_pickup_enabled(false)
 
 ## Enter spectating state
 func _enter_spectating_state() -> void:
 	if input:
 		input.set_input_enabled(false)
-	if weapon:
-		weapon.set_pickup_enabled(false)
+	if item:
+		item.set_pickup_enabled(false)
 
 ## Set health (called by minigame systems)
 func set_health(new_health: int) -> void:
@@ -232,7 +233,7 @@ func set_spawn_position(spawn_pos: Vector2) -> void:
 	spawn_position = spawn_pos
 	Logger.system("Set spawn position for " + player_data.player_name + " to " + str(spawn_position), "BasePlayer")
 
-## Get component by type (utility method) - projectile weapons only
+## Get component by type (utility method) - universal held objects
 func get_component(component_type) -> BaseComponent:
 	match component_type:
 		MovementComponent:
@@ -243,26 +244,35 @@ func get_component(component_type) -> BaseComponent:
 			return input
 		RagdollComponent:
 			return ragdoll
+		ItemComponent:
+			return item
 		_:
-			# Handle WeaponComponent case without typed reference
-			if str(component_type).ends_with("WeaponComponent"):
-				return weapon
 			Logger.warning("Unknown component type requested: " + str(component_type), "BasePlayer")
 			return null
 
-## Projectile weapon system methods
+## Universal held object system methods
 
-## Fire currently held weapon
+## Fire currently held item (if it's a weapon)
 func fire_weapon() -> bool:
-	if weapon:
-		return weapon.fire_held_weapon()
+	if item:
+		return item.fire_held_item()
 	return false
 
-## Throw currently held weapon with specified force (unified system)
-func throw_weapon(force: float = 0.0) -> bool:
-	if weapon:
-		return weapon.throw_held_weapon(force)
+## Use currently held item (consumables, tools, etc.)
+func use_item() -> bool:
+	if item:
+		return item.use_held_item()
 	return false
+
+## Throw currently held item with specified force (unified system)
+func throw_item(force: float = 0.0) -> bool:
+	if item:
+		return item.throw_held_item(force)
+	return false
+
+## Legacy method for compatibility
+func throw_weapon(force: float = 0.0) -> bool:
+	return throw_item(force)
 
 ## Calculate throw force based on player momentum
 func _calculate_throw_force_from_momentum() -> float:
@@ -293,16 +303,26 @@ func _calculate_throw_force_from_momentum() -> float:
 		
 		return throw_force
 
-## Pick up nearest weapon
-func pickup_weapon() -> bool:
-	if weapon:
-		return weapon.pickup_nearest_weapon()
+## Pick up nearest item
+func pickup_item() -> bool:
+	if item:
+		return item.pickup_nearest_item()
 	return false
 
-## Get currently held weapon
+## Legacy method for compatibility
+func pickup_weapon() -> bool:
+	return pickup_item()
+
+## Get currently held item
+func get_held_item() -> BaseItem:
+	if item:
+		return item.get_held_item()
+	return null
+
+## Get currently held weapon (convenience method)
 func get_held_weapon() -> BaseWeapon:
-	if weapon:
-		return weapon.get_held_weapon()
+	if item:
+		return item.get_held_weapon()
 	return null
 
 # Note: drop_held_item() removed - use throw_weapon() with low force instead
@@ -328,11 +348,11 @@ func _on_health_respawned() -> void:
 
 ## Movement component signal handlers
 func _on_facing_changed(new_direction: int) -> void:
-	# Update held weapon position when facing changes
-	if weapon and weapon.get_held_weapon():
-		var held_weapon: BaseWeapon = weapon.get_held_weapon()
-		if held_weapon.has_method("_update_held_position"):
-			held_weapon._update_held_position()
+	# Update held item position when facing changes
+	if item and item.get_held_item():
+		var held_item_obj: BaseItem = item.get_held_item()
+		if held_item_obj.has_method("_update_held_position"):
+			held_item_obj._update_held_position()
 
 func _on_movement_landed() -> void:
 	Logger.debug(player_data.player_name + " landed", "BasePlayer")
@@ -340,18 +360,23 @@ func _on_movement_landed() -> void:
 func _on_movement_jumped() -> void:
 	Logger.debug(player_data.player_name + " jumped", "BasePlayer")
 
-## Projectile weapon component signal handlers
-func _on_weapon_picked_up(weapon_obj: BaseWeapon) -> void:
-	Logger.pickup(player_data.player_name + " picked up " + weapon_obj.item_name, "BasePlayer")
+## Universal item component signal handlers
+func _on_item_picked_up(item_obj: BaseItem) -> void:
+	Logger.pickup(player_data.player_name + " picked up " + item_obj.item_name, "BasePlayer")
 
-func _on_weapon_thrown(weapon_obj: BaseWeapon, throw_velocity: Vector2) -> void:
-	Logger.combat(weapon_obj.item_name + " thrown by " + player_data.player_name, "BasePlayer")
+func _on_item_thrown(item_obj: BaseItem, throw_velocity: Vector2) -> void:
+	Logger.combat(item_obj.item_name + " thrown by " + player_data.player_name, "BasePlayer")
 
-func _on_weapon_fired(weapon_obj: BaseWeapon) -> void:
-	Logger.combat(weapon_obj.item_name + " fired by " + player_data.player_name, "BasePlayer")
+func _on_item_fired(item_obj: BaseItem) -> void:
+	var weapon: BaseWeapon = item_obj as BaseWeapon
+	if weapon:
+		Logger.combat(weapon.item_name + " fired by " + player_data.player_name, "BasePlayer")
 
-func _on_nearby_weapons_changed(nearby_weapons: Array[BaseWeapon]) -> void:
-	Logger.debug(player_data.player_name + " nearby weapons: " + str(nearby_weapons.size()), "BasePlayer")
+func _on_item_used(item_obj: BaseItem) -> void:
+	Logger.item(item_obj.item_name, "used by " + player_data.player_name, "BasePlayer")
+
+func _on_nearby_items_changed(nearby_items: Array[BaseItem]) -> void:
+	Logger.debug(player_data.player_name + " nearby items: " + str(nearby_items.size()), "BasePlayer")
 
 ## Momentum-based input signal handlers
 func _on_input_movement_changed(movement_input: Vector2) -> void:
@@ -366,20 +391,20 @@ func _on_input_fire_pressed() -> void:
 	if current_state != PlayerState.ALIVE:
 		return
 	
-	# Projectile system: Fire held weapon, or pick up weapon if unarmed
+	# Universal item system: Fire held weapon, or pick up item if unarmed
 	if not fire_weapon():
-		pickup_weapon()
+		pickup_item()
 
 func _on_input_throw_pressed() -> void:
 	if current_state == PlayerState.ALIVE:
 		# Calculate force from player momentum
 		var momentum_force = _calculate_throw_force_from_momentum()
-		throw_weapon(momentum_force)
+		throw_item(momentum_force)
 
 func _on_input_pickup_pressed() -> void:
 	if current_state == PlayerState.ALIVE:
-		# Projectile system: Pick up nearby weapon
-		pickup_weapon()
+		# Universal item system: Pick up nearby item
+		pickup_item()
 
 ## Ragdoll component signal handlers
 func _on_ragdoll_entered() -> void:
@@ -393,10 +418,10 @@ func _on_ragdoll_exited() -> void:
 
 # IWeaponHolder interface implementation
 
-## Get weapon hold position from weapon component
+## Get item hold position from item component  
 func get_weapon_hold_position() -> Vector2:
-	if weapon and weapon.has_method("get_weapon_hold_position"):
-		return weapon.get_weapon_hold_position()
+	if item and item.has_method("get_item_hold_position"):
+		return item.get_item_hold_position()
 	return global_position
 
 ## Get facing direction from movement component

@@ -79,9 +79,9 @@ func initialize(direction: Vector2, spawn_position: Vector2, bullet_shooter_id: 
 		Logger.debug("Bullet initialized with shooter exclusion for player ID: " + str(shooter_id), "Bullet")
 	
 	# Set damage from shooter's weapon if available
-	var weapon_component: WeaponComponent = shooter.weapon if shooter else null
-	if weapon_component and weapon_component.get_held_weapon():
-		var weapon: BaseWeapon = weapon_component.get_held_weapon()
+	var item_component: ItemComponent = shooter.item if shooter else null
+	if item_component and item_component.get_held_weapon():
+		var weapon: BaseWeapon = item_component.get_held_weapon()
 		damage = weapon.base_damage
 		
 		# Check for ricochet vs destruction (projectile enhancement)

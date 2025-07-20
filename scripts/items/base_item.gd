@@ -104,8 +104,8 @@ func pickup(player: BasePlayer) -> bool:
 	# Disable physics while held
 	freeze = true
 	Logger.pickup("DEBUG: " + item_name + " removing from collision layers", "BaseItem")
-	CollisionLayers.remove_layer(self, CollisionLayers.Layer.ITEMS)
-	CollisionLayers.remove_mask(self, CollisionLayers.Mask.ITEMS_INTERACTION)
+	# Defer collision state changes to avoid physics flush conflicts
+	call_deferred("_disable_collision_layers")
 	
 	# Attach to player
 	Logger.pickup("DEBUG: " + item_name + " calling _attach_to_player", "BaseItem")
@@ -144,8 +144,8 @@ func drop(drop_velocity: Vector2 = Vector2.ZERO) -> bool:
 	
 	# Re-enable normal item physics
 	freeze = false
-	CollisionLayers.add_layer(self, CollisionLayers.Layer.ITEMS)
-	CollisionLayers.add_mask(self, CollisionLayers.Mask.ITEMS_INTERACTION)
+	# Defer collision state changes to avoid physics flush conflicts
+	call_deferred("_restore_collision_layers")
 	
 	# Apply drop velocity (gentle by nature)
 	linear_velocity = drop_velocity
@@ -259,14 +259,14 @@ func _update_held_position() -> void:
 	var movement_component: MovementComponent = holder.get_component(MovementComponent)
 	var facing_direction: int = movement_component.facing_direction if movement_component else 1
 	
-	# Use inventory component's hold position method if available
-	var inventory_component: InventoryComponent = holder.get_component(InventoryComponent)
-	if inventory_component:
+	# Use item component's hold position method if available
+	var item_component: ItemComponent = holder.get_component(ItemComponent)
+	if item_component:
 		# Get the proper hold position in world coordinates
-		var world_hold_pos: Vector2 = inventory_component.get_item_hold_position()
+		var world_hold_pos: Vector2 = item_component.get_item_hold_position()
 		# Convert to local coordinates relative to the player
 		position = holder.to_local(world_hold_pos)
-		Logger.debug(item_name + " positioned using InventoryComponent: world=" + str(world_hold_pos) + " local=" + str(position), "BaseItem")
+		Logger.debug(item_name + " positioned using ItemComponent: world=" + str(world_hold_pos) + " local=" + str(position), "BaseItem")
 	else:
 		# Fallback: use game config offset directly
 		var hold_offset = game_config.item_hold_offset
@@ -279,6 +279,16 @@ func _update_held_position() -> void:
 	var old_scale = scale.x
 	scale.x = abs(scale.x) * facing_direction
 	Logger.debug(item_name + " item flip: facing=" + str(facing_direction) + " old_scale=" + str(old_scale) + " new_scale=" + str(scale.x), "BaseItem")
+
+## Disable collision layers safely (called deferred to avoid physics flush conflicts)
+func _disable_collision_layers() -> void:
+	CollisionLayers.remove_layer(self, CollisionLayers.Layer.ITEMS)
+	CollisionLayers.remove_mask(self, CollisionLayers.Mask.ITEMS_INTERACTION)
+
+## Restore collision layers safely (called deferred to avoid physics flush conflicts)
+func _restore_collision_layers() -> void:
+	CollisionLayers.add_layer(self, CollisionLayers.Layer.ITEMS)
+	CollisionLayers.add_mask(self, CollisionLayers.Mask.ITEMS_INTERACTION)
 
 ## Detach item from player
 func _detach_from_player() -> void:
