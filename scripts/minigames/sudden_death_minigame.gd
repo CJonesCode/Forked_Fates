@@ -398,6 +398,9 @@ func _on_player_killed_by(victim_id: int, killer_id: int, source_name: String) -
 		
 		# Log the new kill count
 		Logger.combat("⚔️ Player " + str(killer_id) + " now has " + str(new_kills) + " kills", "SuddenDeathMinigame")
+		
+		# Update leadership tracking since kill count changed
+		update_leadership_tracking()
 	else:
 		Logger.error("⚔️ ❌ No victory_condition_manager - kill not credited!", "SuddenDeathMinigame")
 

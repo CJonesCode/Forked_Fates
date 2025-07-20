@@ -14,8 +14,10 @@ extends RigidBody2D
 # Components
 @onready var sprite: Sprite2D = $Sprite2D
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
-@onready var pickup_area: Area2D = $PickupArea
-@onready var pickup_collision: CollisionShape2D = $PickupArea/CollisionShape2D
+
+# Pickup components (may not exist for all items like bullets)
+var pickup_area: Area2D = null
+var pickup_collision: CollisionShape2D = null
 
 # State
 var is_held: bool = false
@@ -41,7 +43,11 @@ func _ready() -> void:
 	# Setup collision layers
 	CollisionLayers.setup_item(self)
 	
-	# Setup pickup area collision
+	# Get pickup area components if they exist (not all items have them)
+	pickup_area = get_node_or_null("PickupArea")
+	pickup_collision = get_node_or_null("PickupArea/CollisionShape2D")
+	
+	# Setup pickup area collision only if pickup area exists
 	if pickup_area:
 		CollisionLayers.setup_pickup_area(pickup_area)
 		# Check before connecting to prevent duplicate connections (standards compliance)

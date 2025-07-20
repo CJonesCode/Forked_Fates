@@ -638,6 +638,7 @@ steam_lobby._on_host_button_pressed()  # Not manual RetryHandler creation!
 - **Bypass user interaction flows in tests** - Test the exact path users take, not simplified versions
 - **Implement cleanup timing manually in individual minigames** - BaseMinigame.abort_minigame() handles this automatically
 - **Use multiple damage methods** - Use unified `take_damage()` method for all sources with proper attribution
+- **Use @onready for optional components** - Use `get_node_or_null()` and null checks for optional inheritance features
 - Use `super().method()` syntax - use `super.method()` in Godot 4.x
 - Create inner classes that are referenced before definition
 - Add conditional checks for static methods with `has_method()`
@@ -671,6 +672,7 @@ steam_lobby._on_host_button_pressed()  # Not manual RetryHandler creation!
 - **Use EventBus for weapon positioning** - Request position via `EventBus.weapon_position_requested.emit()`, respond in WeaponComponent
 - **Test .tres file changes** - Modify weapon configs and see immediate gameplay effects
 - **Use unified damage method** - `player.health.take_damage(damage, source, attacker_id, source_name)` for all damage sources
+- **Use optional component patterns** - `get_node_or_null()` with null checks for specialized inheritance
 - Use `super.method_name()` for parent method calls
 - Use Dictionary structures for complex data instead of inner classes
 - Call static methods directly without conditional checks
@@ -973,6 +975,20 @@ take_damage_from_player(damage, attacker_id, weapon_name, source)  # "Explicit" 
 - **Consistent API** - All damage calls preserve kill tracking information
 
 **Result**: **Reliable kill attribution** - bats, bullets, thrown objects all credit kills properly + cleaner architecture
+
+### **Optional Component Pattern - Graceful Inheritance**
+**Problem**: `@onready` declarations required nodes to exist, breaking specialized subclasses
+```
+@onready var pickup_area: Area2D = $PickupArea  # Crashed when bullets inherited from BaseItem
+```
+
+**Solution**: Optional component pattern with graceful degradation
+- **Dynamic detection** - `get_node_or_null()` instead of `@onready` for optional features
+- **Null-safe usage** - Check existence before use with `if pickup_area:`
+- **Automatic degradation** - Missing components disable features instead of crashing
+- **Flexible inheritance** - Subclasses choose which base features to include in scene structure
+
+**Result**: **Flexible base classes** - bullets inherit BaseItem without pickup areas, other items get full pickup functionality automatically
 
 ### **ObjectIndicator System Generalization - Universal Visual Indicators**
 **Problem**: StatusIndicator system was player-specific and had crown alignment issues
