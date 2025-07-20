@@ -6,7 +6,7 @@
 [ext_resource type="Script" path="res://scripts/player/components/item_component.gd" id="4"]
 [ext_resource type="Script" path="res://scripts/player/components/input_component.gd" id="5"]
 [ext_resource type="Script" path="res://scripts/player/components/ragdoll_component.gd" id="6"]
-[ext_resource type="Script" path="res://scripts/player/components/status_indicator_manager.gd" id="7"]
+[ext_resource type="Script" path="res://scripts/player/components/object_indicator_manager.gd" id="7"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_1"]
 radius = 10.0
@@ -58,5 +58,5 @@ script = ExtResource("5")
 [node name="RagdollComponent" type="Node" parent="."]
 script = ExtResource("6")
 
-[node name="StatusIndicatorManager" type="Node2D" parent="."]
+[node name="ObjectIndicatorManager" type="Node2D" parent="."]
 script = ExtResource("7") 

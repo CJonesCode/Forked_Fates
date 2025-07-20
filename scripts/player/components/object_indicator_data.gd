@@ -1,8 +1,8 @@
-class_name StatusIndicatorData
+class_name ObjectIndicatorData
 extends Resource
 
-## Configuration data for status indicators
-## Defines the appearance and behavior of individual status indicators
+## Configuration data for object indicators
+## Defines the appearance and behavior of individual indicators for any object
 ##
 ## Duration system:
 ## • auto_remove_after = -1.0: infinite duration (default)
@@ -10,8 +10,8 @@ extends Resource
 ## • auto_remove_after > 0.0: remove after X seconds (temporary effects)
 
 # Core properties
-@export var type: StatusIndicatorManager.IndicatorType = StatusIndicatorManager.IndicatorType.TEXT
-@export var category: StatusIndicatorManager.IndicatorCategory = StatusIndicatorManager.IndicatorCategory.CUSTOM
+@export var type: ObjectIndicatorManager.IndicatorType = ObjectIndicatorManager.IndicatorType.TEXT
+@export var category: ObjectIndicatorManager.IndicatorCategory = ObjectIndicatorManager.IndicatorCategory.CUSTOM
 @export var priority: int = 0  # Higher priority indicators appear first
 
 # Visual properties
@@ -53,9 +53,9 @@ extends Resource
 @export var auto_remove_after: float = -1.0  # -1 = never auto-remove, 0 = remove immediately, >0 = remove after X seconds
 
 ## Create a text indicator data
-static func create_text(text: String, color: Color = Color.WHITE, font_size: int = 16, category: StatusIndicatorManager.IndicatorCategory = StatusIndicatorManager.IndicatorCategory.CUSTOM) -> StatusIndicatorData:
-	var data := StatusIndicatorData.new()
-	data.type = StatusIndicatorManager.IndicatorType.TEXT
+static func create_text(text: String, color: Color = Color.WHITE, font_size: int = 16, category: ObjectIndicatorManager.IndicatorCategory = ObjectIndicatorManager.IndicatorCategory.CUSTOM) -> ObjectIndicatorData:
+	var data := ObjectIndicatorData.new()
+	data.type = ObjectIndicatorManager.IndicatorType.TEXT
 	data.category = category
 	data.text = text
 	data.color = color
@@ -63,35 +63,35 @@ static func create_text(text: String, color: Color = Color.WHITE, font_size: int
 	return data
 
 ## Create a sprite indicator data
-static func create_sprite(texture: Texture2D, size: Vector2 = Vector2(24, 24), category: StatusIndicatorManager.IndicatorCategory = StatusIndicatorManager.IndicatorCategory.CUSTOM) -> StatusIndicatorData:
-	var data := StatusIndicatorData.new()
-	data.type = StatusIndicatorManager.IndicatorType.SPRITE
+static func create_sprite(texture: Texture2D, size: Vector2 = Vector2(24, 24), category: ObjectIndicatorManager.IndicatorCategory = ObjectIndicatorManager.IndicatorCategory.CUSTOM) -> ObjectIndicatorData:
+	var data := ObjectIndicatorData.new()
+	data.type = ObjectIndicatorManager.IndicatorType.SPRITE
 	data.category = category
 	data.texture = texture
 	data.size = size
 	return data
 
 ## Create a shape indicator data
-static func create_shape(color: Color, size: Vector2 = Vector2(24, 24), category: StatusIndicatorManager.IndicatorCategory = StatusIndicatorManager.IndicatorCategory.CUSTOM) -> StatusIndicatorData:
-	var data := StatusIndicatorData.new()
-	data.type = StatusIndicatorManager.IndicatorType.SHAPE
+static func create_shape(color: Color, size: Vector2 = Vector2(24, 24), category: ObjectIndicatorManager.IndicatorCategory = ObjectIndicatorManager.IndicatorCategory.CUSTOM) -> ObjectIndicatorData:
+	var data := ObjectIndicatorData.new()
+	data.type = ObjectIndicatorManager.IndicatorType.SHAPE
 	data.category = category
 	data.color = color
 	data.size = size
 	return data
 
 ## Create a custom indicator data
-static func create_custom(custom_scene: PackedScene = null, custom_script: Script = null, category: StatusIndicatorManager.IndicatorCategory = StatusIndicatorManager.IndicatorCategory.CUSTOM) -> StatusIndicatorData:
-	var data := StatusIndicatorData.new()
-	data.type = StatusIndicatorManager.IndicatorType.CUSTOM
+static func create_custom(custom_scene: PackedScene = null, custom_script: Script = null, category: ObjectIndicatorManager.IndicatorCategory = ObjectIndicatorManager.IndicatorCategory.CUSTOM) -> ObjectIndicatorData:
+	var data := ObjectIndicatorData.new()
+	data.type = ObjectIndicatorManager.IndicatorType.CUSTOM
 	data.category = category
 	data.custom_scene = custom_scene
 	data.custom_node_script = custom_script
 	return data
 
 ## Create leadership indicator (crown/lead)
-static func create_leadership_indicator(text: String = "👑", color: Color = Color.GOLD) -> StatusIndicatorData:
-	var data := create_text(text, color, 20, StatusIndicatorManager.IndicatorCategory.LEADERSHIP)
+static func create_leadership_indicator(text: String = "👑", color: Color = Color.GOLD) -> ObjectIndicatorData:
+	var data := create_text(text, color, 20, ObjectIndicatorManager.IndicatorCategory.LEADERSHIP)
 	data.priority = 100  # High priority for leadership
 	data.outline_size = 2
 	data.outline_color = Color.BLACK
@@ -101,36 +101,36 @@ static func create_leadership_indicator(text: String = "👑", color: Color = Co
 	return data
 
 ## Create buff indicator
-static func create_buff_indicator(text: String, color: Color = Color.GREEN) -> StatusIndicatorData:
-	var data := create_text(text, color, 14, StatusIndicatorManager.IndicatorCategory.BUFF)
+static func create_buff_indicator(text: String, color: Color = Color.GREEN) -> ObjectIndicatorData:
+	var data := create_text(text, color, 14, ObjectIndicatorManager.IndicatorCategory.BUFF)
 	data.priority = 80
 	data.outline_size = 1
 	data.outline_color = Color.BLACK
 	return data
 
 ## Create debuff indicator
-static func create_debuff_indicator(text: String, color: Color = Color.RED) -> StatusIndicatorData:
-	var data := create_text(text, color, 14, StatusIndicatorManager.IndicatorCategory.DEBUFF)
+static func create_debuff_indicator(text: String, color: Color = Color.RED) -> ObjectIndicatorData:
+	var data := create_text(text, color, 14, ObjectIndicatorManager.IndicatorCategory.DEBUFF)
 	data.priority = 70
 	data.outline_size = 1
 	data.outline_color = Color.BLACK
 	return data
 
 ## Create team indicator
-static func create_team_indicator(team_color: Color) -> StatusIndicatorData:
-	var data := create_shape(team_color, Vector2(16, 16), StatusIndicatorManager.IndicatorCategory.TEAM)
+static func create_team_indicator(team_color: Color) -> ObjectIndicatorData:
+	var data := create_shape(team_color, Vector2(16, 16), ObjectIndicatorManager.IndicatorCategory.TEAM)
 	data.priority = 60
 	return data
 
 ## Create objective indicator
-static func create_objective_indicator(text: String = "🎯", color: Color = Color.CYAN) -> StatusIndicatorData:
-	var data := create_text(text, color, 16, StatusIndicatorManager.IndicatorCategory.OBJECTIVE)
+static func create_objective_indicator(text: String = "🎯", color: Color = Color.CYAN) -> ObjectIndicatorData:
+	var data := create_text(text, color, 16, ObjectIndicatorManager.IndicatorCategory.OBJECTIVE)
 	data.priority = 90
 	data.pulse_on_update = true
 	return data
 
 ## Create temporary indicator with auto-removal
-static func create_temporary_indicator(text: String, color: Color = Color.YELLOW, duration: float = 3.0) -> StatusIndicatorData:
+static func create_temporary_indicator(text: String, color: Color = Color.YELLOW, duration: float = 3.0) -> ObjectIndicatorData:
 	var data := create_text(text, color, 12)
 	data.auto_remove_after = duration
 	data.animate_entrance = true
@@ -138,21 +138,21 @@ static func create_temporary_indicator(text: String, color: Color = Color.YELLOW
 	return data
 
 ## Create permanent indicator that never auto-removes
-static func create_permanent_indicator(text: String, color: Color = Color.WHITE, font_size: int = 16, category: StatusIndicatorManager.IndicatorCategory = StatusIndicatorManager.IndicatorCategory.CUSTOM) -> StatusIndicatorData:
+static func create_permanent_indicator(text: String, color: Color = Color.WHITE, font_size: int = 16, category: ObjectIndicatorManager.IndicatorCategory = ObjectIndicatorManager.IndicatorCategory.CUSTOM) -> ObjectIndicatorData:
 	var data := create_text(text, color, font_size, category)
 	data.auto_remove_after = -1.0  # Infinite duration - never auto-remove
 	return data
 
 ## Create immediate removal indicator (for flash effects, etc.)
-static func create_immediate_indicator(text: String, color: Color = Color.WHITE, font_size: int = 16) -> StatusIndicatorData:
+static func create_immediate_indicator(text: String, color: Color = Color.WHITE, font_size: int = 16) -> ObjectIndicatorData:
 	var data := create_text(text, color, font_size)
 	data.auto_remove_after = 0.0  # Remove immediately on next frame
 	data.animate_entrance = false  # No entrance animation for immediate removal
 	return data
 
 ## Clone this indicator data
-func clone() -> StatusIndicatorData:
-	var new_data := StatusIndicatorData.new()
+func clone() -> ObjectIndicatorData:
+	var new_data := ObjectIndicatorData.new()
 	
 	# Copy all properties
 	new_data.type = type

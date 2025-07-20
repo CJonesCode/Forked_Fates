@@ -80,13 +80,14 @@ scripts/core/
 ```
 scripts/player/
 ├── base_player.gd         # Component coordinator (NOT monolithic)
-└── components/            # 6 specialized components
-    ├── base_component.gd      # Abstract base with lifecycle
-    ├── movement_component.gd  # Physics, jumping, facing
-    ├── health_component.gd    # Health, damage, death
-    ├── inventory_component.gd # Items, pickup, use
-    ├── input_component.gd     # Input processing
-    └── ragdoll_component.gd   # Ragdoll physics
+└── components/            # 7 specialized components
+    ├── base_component.gd           # Abstract base with lifecycle
+    ├── movement_component.gd       # Physics, jumping, facing
+    ├── health_component.gd         # Health, damage, death
+    ├── item_component.gd           # Universal held objects (weapons, consumables, tools)
+    ├── input_component.gd          # Input processing
+    ├── ragdoll_component.gd        # Ragdoll physics
+    └── object_indicator_manager.gd # Universal object indicators (crown, team, buffs, etc.)
 ```
 
 ### **Weapon System (Operational)**
@@ -126,7 +127,10 @@ class_name BasePlayer extends CharacterBody2D
 
 @onready var movement: MovementComponent = $MovementComponent
 @onready var health: HealthComponent = $HealthComponent
-# ... other components
+@onready var item: ItemComponent = $ItemComponent  # Universal held objects
+@onready var input: InputComponent = $InputComponent
+@onready var ragdoll: RagdollComponent = $RagdollComponent
+@onready var object_indicators: ObjectIndicatorManager = $ObjectIndicatorManager
 
 # Components communicate via signals
 health.died.connect(_on_health_died)
@@ -658,6 +662,8 @@ steam_lobby._on_host_button_pressed()  # Not manual RetryHandler creation!
 - Test actual user interaction paths - Simulate button clicks and follow the same method chains users trigger
 - Use await when calling abort_minigame() - BaseMinigame handles cleanup timing automatically
 - **Use descriptive ExtResource IDs** - "pistol_scene" instead of "2_scene" for maintainability
+- **Use ObjectIndicator system** - Add visual indicators with `add_object_indicator()`, `add_leadership_indicator()`, etc.
+- **Ensure crown logic requires performance gaps** - Leadership should return null when players tied
 
 ## Performance Considerations
 
@@ -767,6 +773,17 @@ var temp_holder: BasePlayer = holder
 holder = temp_holder
 is_held = true
 ```
+
+### **ObjectIndicator System Patterns**
+```gdscript
+# Add indicators to any object (players, items, NPCs)
+player.add_leadership_indicator("👑", Color.GOLD)  # Crown with proper centering
+player.add_team_indicator(Color.RED)  # Team markers
+player.add_buff_indicator("speed", "⚡", Color.CYAN)  # Temporary buffs
+player.remove_object_indicator("speed_buff", true)  # Remove with animation
+```
+
+
 
 ### **Logging Best Practices**
 ```gdscript
@@ -907,6 +924,32 @@ EventBus.emit_player_lives_changed(player_id, new_lives) # Update UI display
 ```
 
 ## Recent Architectural Changes
+
+### **ObjectIndicator System Generalization - Universal Visual Indicators**
+**Problem**: StatusIndicator system was player-specific and had crown alignment issues
+```
+PlayerStatusIndicator system - only worked for players
+StatusIndicatorManager - player-centric design
+Crown emoji not properly centered above player's head
+```
+
+**Solution**: Complete generalization to universal ObjectIndicator system
+- **System Rename**: StatusIndicator → ObjectIndicator (works with any object)
+- **File Rename**: All component files renamed with proper class updates
+- **BasePlayer Update**: Uses ObjectIndicatorManager instead of StatusIndicatorManager
+- **Crown Alignment Fix**: Improved centering logic and container setup
+- **Scene Updates**: base_player.tscn references new object_indicator_manager.gd
+- **Example Updates**: New object_indicator_example.gd and object_indicator_demo.gd
+
+**Crown Leadership Fix**: Fixed bug where crown appeared immediately when all players tied
+- **Problem**: `PhysicsMinigame._get_elimination_leader()` returned first player when stats tied
+- **Solution**: Modified leadership logic to require clear performance gap
+- **Returns null** when multiple players tied at top performance  
+- **Crown only appears** when there's actual performance difference, never at round start
+
+**Result**: **Universal indicator system** - works for players, items, NPCs, any object + properly centered crowns + correct tie handling
+
+## Previous Architectural Changes
 
 ### **Steamworks-Only Networking Implementation - Complete Replacement**
 **Problem**: Codebase had dual networking systems (IP-based ENet + Steamworks), creating complexity and confusion

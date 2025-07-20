@@ -1,15 +1,14 @@
-class_name StatusIndicatorManager
+class_name ObjectIndicatorManager
 extends Node2D
 
-# Preload PlayerStatusIndicator script to ensure it's available
-const PlayerStatusIndicatorScript = preload("res://scripts/player/components/status_indicator.gd")
+# Preload ObjectIndicator script to ensure it's available
+const ObjectIndicatorScript = preload("res://scripts/player/components/object_indicator.gd")
 
-## Universal status indicator system for players
-## Displays multiple indicators above player characters using a flexible container
+## Universal indicator system for any object
+## Displays multiple indicators above any object using a flexible container
 ## Supports text, sprites, and other visual elements for various status types
 ##
-## AUTOMATIC CLEANUP: BasePlayer instances are destroyed between minigames,
-## so all status indicators are automatically cleaned up without manual intervention
+## AUTOMATIC CLEANUP: When the target object is destroyed, this manager is also cleaned up
 ##
 ## DURATION CONTROL: auto_remove_after values:
 ## • -1.0 = infinite duration (default)
@@ -28,13 +27,13 @@ var bob_amplitude: float = 3.0
 var bob_speed: float = 2.0
 
 # State tracking
-var active_indicators: Dictionary = {}  # indicator_id -> PlayerStatusIndicator
+var active_indicators: Dictionary = {}  # indicator_id -> ObjectIndicator
 var auto_remove_timers: Dictionary = {}  # indicator_id -> float (remaining time)
 var base_offset: Vector2
 var bob_timer: float = 0.0
-var target_player: BasePlayer = null
+var target_object: Node = null  # Generalized to any object
 
-# Status indicator types
+# Indicator types
 enum IndicatorType {
 	TEXT,
 	SPRITE,
@@ -42,7 +41,7 @@ enum IndicatorType {
 	CUSTOM
 }
 
-# Status indicator categories for organization
+# Indicator categories for organization
 enum IndicatorCategory {
 	LEADERSHIP,      # Crown, lead indicators
 	BUFF,           # Positive status effects
@@ -57,7 +56,7 @@ func _ready() -> void:
 	_setup_animation_player()
 	base_offset = Vector2(0, float_height)
 	position = base_offset
-	Logger.debug("StatusIndicatorManager initialized", "StatusIndicatorManager")
+	Logger.debug("ObjectIndicatorManager initialized", "ObjectIndicatorManager")
 
 func _process(delta: float) -> void:
 	if active_indicators.is_empty():
@@ -72,7 +71,7 @@ func _process(delta: float) -> void:
 	# Handle auto-removal timers
 	_process_auto_removal_timers(delta)
 
-## Setup the horizontal container for indicators
+## Setup the horizontal container for indicators with improved centering
 func _setup_container() -> void:
 	if not indicator_container:
 		indicator_container = HBoxContainer.new()
@@ -83,15 +82,13 @@ func _setup_container() -> void:
 	indicator_container.alignment = BoxContainer.ALIGNMENT_CENTER
 	indicator_container.add_theme_constant_override("separation", indicator_spacing)
 	
-	# Center the container
-	indicator_container.anchor_left = 0.5
-	indicator_container.anchor_right = 0.5
-	indicator_container.anchor_top = 0.5
-	indicator_container.anchor_bottom = 0.5
-	indicator_container.offset_left = 0
-	indicator_container.offset_right = 0
-	indicator_container.offset_top = 0
-	indicator_container.offset_bottom = 0
+	# IMPROVED CENTERING: Ensure the container is properly centered
+	# Use the most reliable centering approach for UI elements
+	indicator_container.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	
+	# Additional centering improvements for crown alignment
+	indicator_container.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	indicator_container.grow_vertical = Control.GROW_DIRECTION_BOTH
 
 ## Setup animation player for entrance/exit effects
 func _setup_animation_player() -> void:
@@ -100,15 +97,15 @@ func _setup_animation_player() -> void:
 		animation_player.name = "AnimationPlayer"
 		add_child(animation_player)
 
-## Add a status indicator to the display
-func add_indicator(indicator_id: String, indicator_data: StatusIndicatorData) -> bool:
+## Add an indicator to the display
+func add_indicator(indicator_id: String, indicator_data: ObjectIndicatorData) -> bool:
 	if active_indicators.has(indicator_id):
-		Logger.warning("Indicator already exists: " + indicator_id, "StatusIndicatorManager")
+		Logger.warning("Indicator already exists: " + indicator_id, "ObjectIndicatorManager")
 		return false
 	
 	var indicator = _create_indicator(indicator_data)
 	if not indicator:
-		Logger.error("Failed to create indicator: " + indicator_id, "StatusIndicatorManager")
+		Logger.error("Failed to create indicator: " + indicator_id, "ObjectIndicatorManager")
 		return false
 	
 	# Add to container and track
@@ -125,10 +122,10 @@ func add_indicator(indicator_id: String, indicator_data: StatusIndicatorData) ->
 	# Update container visibility
 	_update_container_visibility()
 	
-	Logger.debug("Added indicator: " + indicator_id + " (" + str(indicator_data.type) + ")", "StatusIndicatorManager")
+	Logger.debug("Added indicator: " + indicator_id + " (" + str(indicator_data.type) + ")", "ObjectIndicatorManager")
 	return true
 
-## Remove a status indicator from the display
+## Remove an indicator from the display
 func remove_indicator(indicator_id: String, animate: bool = true) -> bool:
 	if not active_indicators.has(indicator_id):
 		return false
@@ -152,18 +149,18 @@ func remove_indicator(indicator_id: String, animate: bool = true) -> bool:
 	# Update container visibility
 	_update_container_visibility()
 	
-	Logger.debug("Removed indicator: " + indicator_id, "StatusIndicatorManager")
+	Logger.debug("Removed indicator: " + indicator_id, "ObjectIndicatorManager")
 	return true
 
 ## Update an existing indicator
-func update_indicator(indicator_id: String, new_data: StatusIndicatorData) -> bool:
+func update_indicator(indicator_id: String, new_data: ObjectIndicatorData) -> bool:
 	if not active_indicators.has(indicator_id):
 		return false
 	
 	var indicator = active_indicators[indicator_id]
 	indicator.update_data(new_data)
 	
-	Logger.debug("Updated indicator: " + indicator_id, "StatusIndicatorManager")
+	Logger.debug("Updated indicator: " + indicator_id, "ObjectIndicatorManager")
 	return true
 
 ## Remove all indicators
@@ -195,42 +192,43 @@ func get_indicators_by_category(category: IndicatorCategory) -> Array[String]:
 			result.append(indicator_id)
 	return result
 
-## Attach indicator manager to a player
-func attach_to_player(player: BasePlayer) -> void:
-	if target_player == player:
+## Attach indicator manager to any object
+func attach_to_object(object: Node) -> void:
+	if target_object == object:
 		return
 	
-	# Detach from previous player if any
-	if target_player:
-		detach_from_player()
+	# Detach from previous object if any
+	if target_object:
+		detach_from_object()
 	
-	target_player = player
+	target_object = object
 	
-	# Add as child to player
-	player.add_child(self)
+	# Add as child to object
+	object.add_child(self)
 	
-	# Position above player
+	# Position above object
 	position = base_offset
 	
-	Logger.debug("StatusIndicatorManager attached to player: " + player.player_data.player_name, "StatusIndicatorManager")
+	var object_name = object.name if object else "Unknown"
+	Logger.debug("ObjectIndicatorManager attached to object: " + object_name, "ObjectIndicatorManager")
 
-## Detach from current player
-func detach_from_player() -> void:
-	if not target_player:
+## Detach from current object
+func detach_from_object() -> void:
+	if not target_object:
 		return
 	
-	var previous_player = target_player
-	target_player = null
+	var previous_object = target_object
+	target_object = null
 	
-	# Remove from player
-	if get_parent() == previous_player:
-		previous_player.remove_child(self)
+	# Remove from object
+	if get_parent() == previous_object:
+		previous_object.remove_child(self)
 	
-	Logger.debug("StatusIndicatorManager detached from player", "StatusIndicatorManager")
+	Logger.debug("ObjectIndicatorManager detached from object", "ObjectIndicatorManager")
 
 ## Create a specific indicator based on data
-func _create_indicator(indicator_data: StatusIndicatorData):
-	var indicator = PlayerStatusIndicatorScript.new()
+func _create_indicator(indicator_data: ObjectIndicatorData):
+	var indicator = ObjectIndicatorScript.new()
 	indicator.setup_from_data(indicator_data)
 	return indicator
 
@@ -318,13 +316,12 @@ func _process_auto_removal_timers(delta: float) -> void:
 		remove_indicator(indicator_id, true)
 
 ## Cleanup on removal
-## Note: BasePlayer instances are destroyed between minigames, so this provides
-## automatic cleanup without manual intervention needed
+## Note: When target object is destroyed, this manager is also cleaned up automatically
 func _exit_tree() -> void:
 	clear_indicators(false)  # No animation during cleanup
 	auto_remove_timers.clear()
 	
-	if target_player:
-		target_player = null
+	if target_object:
+		target_object = null
 	
-	Logger.debug("StatusIndicatorManager cleanup completed (automatic via BasePlayer destruction)", "StatusIndicatorManager") 
+	Logger.debug("ObjectIndicatorManager cleanup completed (automatic via target object destruction)", "ObjectIndicatorManager") 

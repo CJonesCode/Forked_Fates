@@ -85,6 +85,9 @@ func _on_physics_initialize() -> void:
 	# Connect to player death events for lives management
 	EventBus.player_died.connect(_on_sudden_death_player_died)
 	
+	# Connect to damage events for kill tracking
+	EventBus.player_damage_reported.connect(_on_player_damage_for_kills)
+	
 	# Show player HUD using UIManager
 	var player_data_array: Array[PlayerData] = []
 	for player_data in GameManager.players.values():
@@ -354,6 +357,29 @@ func _on_sudden_death_player_died(player_id: int) -> void:
 		# Update leadership tracking since player elimination might change leader
 		update_leadership_tracking()
 
+## Track kills when damage results in death
+func _on_player_damage_for_kills(victim_id: int, attacker_id: int, damage: int, source_name: String) -> void:
+	# Only track kills from other players (not self-damage or environmental)
+	if attacker_id == -1 or attacker_id == victim_id:
+		return
+	
+	# Check if this damage will result in death
+	var victim_player: BasePlayer = null
+	if player_spawner:
+		victim_player = player_spawner.get_player(victim_id)
+	
+	if victim_player and victim_player.health:
+		# Check if victim will die from this damage
+		var victim_health = victim_player.health.current_health
+		if victim_health <= damage:
+			# Award a kill to the attacker
+			if victory_condition_manager:
+				victory_condition_manager.add_score(attacker_id, 1)
+				var attacker_data = GameManager.get_player_data(attacker_id)
+				var victim_data = GameManager.get_player_data(victim_id)
+				if attacker_data and victim_data:
+					Logger.combat("Kill credited: " + attacker_data.player_name + " eliminated " + victim_data.player_name, "SuddenDeathMinigame")
+
 ## Clean up Sudden Death specific connections
 func _on_physics_end(result: MinigameResult) -> void:
 	# Disconnect from death events
@@ -363,5 +389,9 @@ func _on_physics_end(result: MinigameResult) -> void:
 	# Clear respawn blocks
 	if respawn_manager:
 		respawn_manager.clear_all_respawn_blocks()
+	
+	# Disconnect from damage events
+	if EventBus.player_damage_reported.is_connected(_on_player_damage_for_kills):
+		EventBus.player_damage_reported.disconnect(_on_player_damage_for_kills)
 	
 	Logger.system("SuddenDeathMinigame cleanup completed with projectile weapon system", "SuddenDeathMinigame") 

@@ -1,7 +1,7 @@
 extends Node
 
-## Simple demonstration of the new status indicator system
-## Shows how to add different types of indicators to players
+## Simple demonstration of the new object indicator system
+## Shows how to add different types of indicators to any object
 
 var demo_players: Array[BasePlayer] = []
 var demo_timer: float = 0.0
@@ -34,7 +34,7 @@ func _find_demo_players() -> void:
 	# Find all BasePlayer nodes in the scene
 	_find_players_recursive(get_tree().current_scene)
 	
-	Logger.debug("Found " + str(demo_players.size()) + " players for status indicator demo", "StatusIndicatorDemo")
+	Logger.debug("Found " + str(demo_players.size()) + " players for object indicator demo", "ObjectIndicatorDemo")
 
 func _find_players_recursive(node: Node) -> void:
 	if node is BasePlayer:
@@ -45,10 +45,10 @@ func _find_players_recursive(node: Node) -> void:
 
 func _start_demo() -> void:
 	if demo_players.is_empty():
-		Logger.warning("No players found for status indicator demo", "StatusIndicatorDemo")
+		Logger.warning("No players found for object indicator demo", "ObjectIndicatorDemo")
 		return
 	
-	Logger.system("Starting status indicator demonstration", "StatusIndicatorDemo")
+	Logger.system("Starting object indicator demonstration", "ObjectIndicatorDemo")
 
 func _demo_leadership_indicators() -> void:
 	# Clear all indicators first
@@ -71,55 +71,77 @@ func _demo_buff_debuff_indicators() -> void:
 	# Clear all indicators first
 	_clear_all_indicators()
 	
-	# Add various buffs and debuffs
+	# Add various buff/debuff indicators
 	for i in range(demo_players.size()):
 		var player = demo_players[i]
-		
-		match i % 4:
-			0:
-				player.add_buff_indicator("speed", "⚡", Color.CYAN)
-			1:
-				player.add_debuff_indicator("poison", "☠️", Color.GREEN)
-			2:
-				player.add_buff_indicator("strength", "💪", Color.ORANGE)
-			3:
-				player.add_debuff_indicator("slow", "🐌", Color.PURPLE)
+		if i % 4 == 0:
+			player.add_buff_indicator("speed", "⚡", Color.CYAN)
+		elif i % 4 == 1:
+			player.add_buff_indicator("strength", "💪", Color.ORANGE)
+		elif i % 4 == 2:
+			player.add_debuff_indicator("poison", "☠️", Color.GREEN)
+		else:
+			player.add_debuff_indicator("slow", "🐌", Color.PURPLE)
 
 func _demo_temporary_indicators() -> void:
 	# Clear all indicators first
 	_clear_all_indicators()
 	
-	# Add temporary indicators that auto-remove
+	# Add temporary indicators that will auto-remove
 	for i in range(demo_players.size()):
 		var player = demo_players[i]
-		player.add_temporary_indicator("demo_temp_" + str(i), "+100", Color.YELLOW, 2.0)
+		player.add_temporary_indicator("temp_" + str(i), "✨", Color.YELLOW, 2.0)
 
 func _demo_multiple_indicators() -> void:
 	# Clear all indicators first
 	_clear_all_indicators()
 	
-	# Show multiple indicators on the same player
+	# Add multiple indicators to show priority ordering
 	if demo_players.size() > 0:
 		var player = demo_players[0]
 		
-		# Add leadership
+		# High priority leadership
 		player.add_leadership_indicator("👑", Color.GOLD)
 		
-		# Add team indicator
+		# Medium priority team
 		player.add_team_indicator(Color.RED)
 		
-		# Add buff
+		# Lower priority buff
 		player.add_buff_indicator("shield", "🛡️", Color.BLUE)
 		
-		# Add custom indicator
-		var custom_data = StatusIndicatorData.create_text("🎯", Color.CYAN, 16)
-		custom_data.tooltip = "Objective Target"
-		custom_data.priority = 95
-		player.add_status_indicator("objective", custom_data)
+		# Add custom indicator with specific priority
+		var custom_data := ObjectIndicatorData.create_text("🎯", Color.WHITE, 16)
+		custom_data.priority = 85  # Between team and buff
+		custom_data.tooltip = "Custom Priority Indicator"
+		player.add_indicator("custom", custom_data)
+
+func _demo_object_indicators() -> void:
+	"""Demonstrate indicators on non-player objects"""
+	
+	# Find some other objects in the scene to demonstrate on
+	var other_objects = _find_demo_objects()
+	
+	for obj in other_objects:
+		# Create indicator manager for this object
+		var indicator_manager = ObjectIndicatorManager.new()
+		indicator_manager.attach_to_object(obj)
+		
+		# Add a simple indicator
+		var demo_data := ObjectIndicatorData.create_text("🔥", Color.RED, 14)
+		demo_data.tooltip = "Demo Object Indicator"
+		indicator_manager.add_indicator("demo", demo_data)
+
+func _find_demo_objects() -> Array[Node]:
+	# Find non-player objects that could have indicators
+	var objects: Array[Node] = []
+	
+	# You could add logic here to find items, weapons, or other objects
+	# For now, return empty array
+	
+	return objects
 
 func _clear_all_indicators() -> void:
+	# Clear indicators from all demo players
 	for player in demo_players:
-		await player.clear_status_indicators(false)  # No animation for quick clearing
-
-func _on_demo_complete() -> void:
-	Logger.system("Status indicator demonstration complete", "StatusIndicatorDemo") 
+		if player and is_instance_valid(player):
+			await player.clear_indicators(false)  # No animation for demo speed 

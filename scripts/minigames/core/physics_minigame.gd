@@ -344,34 +344,75 @@ func _get_eligible_players() -> Array[BasePlayer]:
 	return eligible
 
 ## Get leader for elimination games (most lives, then most kills)
+## Only award leadership when there's a clear performance gap - no crown when tied
 func _get_elimination_leader(players: Array[BasePlayer]) -> BasePlayer:
-	var leader: BasePlayer = null
+	if players.is_empty():
+		return null
+	
 	var best_lives: int = -1
 	var best_kills: int = -1
 	
+	# First pass: find the best performance levels
 	for player in players:
 		var lives = player.player_data.current_lives
-		var kills = 0  # Default to 0 since we don't track kills in lifetime_stats during minigames
+		var kills = _get_player_kills(player.player_data.player_id)  # Get actual kill count
 		
 		if lives > best_lives or (lives == best_lives and kills > best_kills):
-			leader = player
 			best_lives = lives
 			best_kills = kills
 	
-	return leader
+	# Second pass: find all players tied at the top performance
+	var top_performers: Array[BasePlayer] = []
+	for player in players:
+		var lives = player.player_data.current_lives
+		var kills = _get_player_kills(player.player_data.player_id)  # Get actual kill count
+		
+		if lives == best_lives and kills == best_kills:
+			top_performers.append(player)
+	
+	# Only award leadership if there's a clear winner (no ties at the top)
+	if top_performers.size() == 1:
+		return top_performers[0]
+	else:
+		# Multiple players tied at the top - no leadership awarded
+		Logger.debug("Leadership not awarded - " + str(top_performers.size()) + " players tied with " + str(best_lives) + " lives, " + str(best_kills) + " kills", "PhysicsMinigame")
+		return null
 
-## Get leader for score-based games
+## Get actual kill count for a player from victory tracking
+func _get_player_kills(player_id: int) -> int:
+	if victory_condition_manager:
+		var scores = victory_condition_manager.get_scores()
+		return scores.get(player_id, 0)
+	return 0
+
+## Get leader for score-based games  
+## Only award leadership when there's a clear performance gap - no crown when tied
 func _get_score_leader(players: Array[BasePlayer]) -> BasePlayer:
-	var leader: BasePlayer = null
+	if players.is_empty():
+		return null
+	
 	var best_score: int = -1
 	
+	# First pass: find the best score
 	for player in players:
 		var score = 0  # Default to 0 since we don't track scores in lifetime_stats during minigames
 		if score > best_score:
-			leader = player
 			best_score = score
 	
-	return leader
+	# Second pass: find all players tied at the top score
+	var top_performers: Array[BasePlayer] = []
+	for player in players:
+		var score = 0  # Default to 0 since we don't track scores in lifetime_stats during minigames
+		if score == best_score:
+			top_performers.append(player)
+	
+	# Only award leadership if there's a clear winner (no ties at the top)
+	if top_performers.size() == 1:
+		return top_performers[0]
+	else:
+		# Multiple players tied at the top - no leadership awarded
+		Logger.debug("Leadership not awarded - " + str(top_performers.size()) + " players tied with " + str(best_score) + " score", "PhysicsMinigame")
+		return null
 
 
 ## Override damage handling for physics minigames - apply damage directly to player health
