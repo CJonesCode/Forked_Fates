@@ -37,9 +37,9 @@ var is_showing_tutorial: bool = false
 var tutorial_timer: float = 0.0
 var start_time: float = 0.0
 
-# Crown system (available to all minigame types)
-var crown_manager = null  # Will be CrownManager, but loaded dynamically
-@export var use_crown_system: bool = true
+# Leadership tracking (minigames handle this directly with status indicators)
+var current_leader: BasePlayer = null
+@export var use_leadership_tracking: bool = true
 
 func _ready() -> void:
 	Logger.system("BaseMinigame ready: " + minigame_name, "BaseMinigame")
@@ -66,9 +66,7 @@ func initialize_minigame(minigame_context: MinigameContext) -> void:
 	# Connect to universal damage reporting system
 	EventBus.player_damage_reported.connect(_on_player_damage_reported)
 	
-	# Setup crown system if enabled
-	if use_crown_system:
-		_setup_crown_system()
+
 	
 	# Call virtual implementation
 	_on_initialize(minigame_context)
@@ -140,11 +138,8 @@ func end_minigame(result) -> void:
 	# Hide any active game HUD when minigame ends
 	UIManager.hide_game_hud()
 	
-	# Cleanup crown system
-	if crown_manager:
-		crown_manager.remove_crown()
-		crown_manager.queue_free()
-		crown_manager = null
+	# Clear current leader reference (BasePlayer instances will be destroyed by spawner)
+	current_leader = null
 	
 	# Disconnect universal systems
 	if EventBus.player_damage_reported.is_connected(_on_player_damage_reported):
@@ -278,68 +273,46 @@ func get_tutorial_data() -> Dictionary:
 		"time_remaining": tutorial_timer
 	}
 
-## Setup crown system for any minigame type
-func _setup_crown_system() -> void:
-	if not context:
-		Logger.warning("Cannot setup crown system without context", "BaseMinigame")
+## Award leadership indicator to a player
+func award_leadership(player: BasePlayer, text: String = "👑", color: Color = Color.GOLD) -> void:
+	if not use_leadership_tracking:
 		return
 	
-	# Create crown manager
-	crown_manager = context.get_standard_manager("crown_manager")
-	if crown_manager:
-		add_child(crown_manager)
-		
-		# Connect crown signals
-		crown_manager.crown_awarded.connect(_on_crown_awarded)
-		crown_manager.crown_removed.connect(_on_crown_removed)
-		crown_manager.crown_transferred.connect(_on_crown_transferred)
-		
-		# Setup crown manager with whatever managers are available
-		# Different minigame types have different managers available
-		_configure_crown_manager()
-		
-		Logger.system("Crown system setup completed for: " + minigame_name, "BaseMinigame")
+	# Remove from previous leader
+	if current_leader and current_leader != player:
+		current_leader.remove_leadership_indicator()
+		Logger.game_flow("Leadership removed from: " + current_leader.player_data.player_name + " in " + minigame_name, "BaseMinigame")
+		_on_leadership_removed(current_leader)
+	
+	# Set new leader
+	var previous_leader = current_leader
+	current_leader = player
+	
+	# Add leadership indicator
+	player.add_leadership_indicator(text, color)
+	Logger.game_flow("Leadership awarded to: " + player.player_data.player_name + " in " + minigame_name, "BaseMinigame")
+	
+	if previous_leader and previous_leader != player:
+		_on_leadership_transferred(previous_leader, player)
 	else:
-		Logger.warning("Failed to create crown manager", "BaseMinigame")
+		_on_leadership_awarded(player)
 
-## Configure crown manager based on available minigame managers
-## Override this in subclasses to provide specific managers
-func _configure_crown_manager() -> void:
-	if crown_manager:
-		# Default configuration - crown manager will use basic setup
-		# Subclasses can override this to provide victory_condition_manager, player_spawner, etc.
-		crown_manager.setup_for_minigame(null, null)
-		Logger.debug("Crown manager configured with basic setup", "BaseMinigame")
+## Remove leadership from current leader
+func remove_leadership() -> void:
+	if current_leader:
+		current_leader.remove_leadership_indicator()
+		var previous_leader = current_leader
+		current_leader = null
+		Logger.game_flow("Leadership cleared from: " + previous_leader.player_data.player_name + " in " + minigame_name, "BaseMinigame")
+		_on_leadership_removed(previous_leader)
 
-## Crown system signal handlers (available to all minigame types)
+## Get current leader
+func get_current_leader() -> BasePlayer:
+	return current_leader
 
-## Called when crown is awarded to a player
-func _on_crown_awarded(player: BasePlayer) -> void:
-	Logger.game_flow("Crown awarded to: " + player.player_data.player_name + " in " + minigame_name, "BaseMinigame")
-	# Pulse crown for emphasis when first awarded
-	if crown_manager and crown_manager.crown_indicator:
-		crown_manager.crown_indicator.pulse_crown()
-	
-	# Hook for subclass crown handling
-	_on_minigame_crown_awarded(player)
-
-## Called when crown is removed from a player
-func _on_crown_removed(player: BasePlayer) -> void:
-	Logger.game_flow("Crown removed from: " + player.player_data.player_name + " in " + minigame_name, "BaseMinigame")
-	
-	# Hook for subclass crown handling
-	_on_minigame_crown_removed(player)
-
-## Called when crown transfers from one player to another
-func _on_crown_transferred(from_player: BasePlayer, to_player: BasePlayer) -> void:
-	Logger.game_flow("Crown transferred from " + from_player.player_data.player_name + " to " + to_player.player_data.player_name + " in " + minigame_name, "BaseMinigame")
-	
-	# Pulse crown for emphasis on transfer
-	if crown_manager and crown_manager.crown_indicator:
-		crown_manager.crown_indicator.pulse_crown()
-	
-	# Hook for subclass crown transfer handling
-	_on_minigame_crown_transferred(from_player, to_player)
+## Check if a player has leadership
+func has_leadership(player: BasePlayer) -> bool:
+	return current_leader == player
 
 ## Create MinigameInfo from this minigame's metadata (for self-registration)
 func create_registry_info(scene_path: String):
@@ -410,22 +383,24 @@ func _on_tutorial_finished() -> void:
 	# Default implementation does nothing
 	pass
 
-# Crown system virtual methods (available to all minigame types)
+# Leadership tracking virtual methods (available to all minigame types)
 
-## Called when a crown is awarded to a player
-## Override this to handle crown-specific effects in your minigame
-func _on_minigame_crown_awarded(player: BasePlayer) -> void:
+## Called when leadership is awarded to a player
+## Override this to handle leadership-specific effects in your minigame
+func _on_leadership_awarded(player: BasePlayer) -> void:
 	# Default implementation does nothing
 	pass
 
-## Called when a crown is removed from a player  
-## Override this to handle crown removal effects in your minigame
-func _on_minigame_crown_removed(player: BasePlayer) -> void:
+## Called when leadership is removed from a player  
+## Override this to handle leadership removal effects in your minigame
+func _on_leadership_removed(player: BasePlayer) -> void:
 	# Default implementation does nothing
 	pass
 
-## Called when a crown transfers between players
-## Override this to handle crown transfer effects in your minigame
-func _on_minigame_crown_transferred(from_player: BasePlayer, to_player: BasePlayer) -> void:
+## Called when leadership transfers between players
+## Override this to handle leadership transfer effects in your minigame
+func _on_leadership_transferred(from_player: BasePlayer, to_player: BasePlayer) -> void:
 	# Default implementation does nothing
-	pass 
+	pass
+
+ 

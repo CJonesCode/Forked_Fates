@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/player/base_player.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/player/components/movement_component.gd" id="2"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/player/components/item_component.gd" id="4"]
 [ext_resource type="Script" path="res://scripts/player/components/input_component.gd" id="5"]
 [ext_resource type="Script" path="res://scripts/player/components/ragdoll_component.gd" id="6"]
+[ext_resource type="Script" path="res://scripts/player/components/status_indicator_manager.gd" id="7"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_1"]
 radius = 10.0
@@ -55,4 +56,7 @@ script = ExtResource("4")
 script = ExtResource("5")
 
 [node name="RagdollComponent" type="Node" parent="."]
-script = ExtResource("6") 
+script = ExtResource("6")
+
+[node name="StatusIndicatorManager" type="Node2D" parent="."]
+script = ExtResource("7") 

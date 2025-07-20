@@ -23,6 +23,7 @@ var game_config: GameConfig
 @onready var item: ItemComponent = $ItemComponent  # ItemComponent - universal held objects
 @onready var input: InputComponent = $InputComponent
 @onready var ragdoll: RagdollComponent = $RagdollComponent
+@onready var status_indicators: StatusIndicatorManager = $StatusIndicatorManager
 
 # Visual components
 @onready var sprite: Sprite2D = $Sprite2D
@@ -447,6 +448,71 @@ func get_current_velocity() -> Vector2:
 ## Check if player can hold weapons based on state
 func can_hold_weapons() -> bool:
 	return current_state == PlayerState.ALIVE
+
+## Add a status indicator above the player
+func add_status_indicator(indicator_id: String, indicator_data: StatusIndicatorData) -> bool:
+	if not status_indicators:
+		Logger.warning("StatusIndicatorManager not available on player", "BasePlayer")
+		return false
+	return status_indicators.add_indicator(indicator_id, indicator_data)
+
+## Remove a status indicator from the player
+func remove_status_indicator(indicator_id: String, animate: bool = true) -> bool:
+	if not status_indicators:
+		return false
+	return status_indicators.remove_indicator(indicator_id, animate)
+
+## Update an existing status indicator
+func update_status_indicator(indicator_id: String, new_data: StatusIndicatorData) -> bool:
+	if not status_indicators:
+		return false
+	return status_indicators.update_indicator(indicator_id, new_data)
+
+## Check if player has a specific status indicator
+func has_status_indicator(indicator_id: String) -> bool:
+	if not status_indicators:
+		return false
+	return status_indicators.has_indicator(indicator_id)
+
+## Get all active status indicators
+func get_active_status_indicators() -> Array[String]:
+	if not status_indicators:
+		return []
+	return status_indicators.get_active_indicators()
+
+## Clear all status indicators
+func clear_status_indicators(animate: bool = true) -> void:
+	if status_indicators:
+		status_indicators.clear_indicators(animate)
+
+## Add leadership indicator (crown, lead, etc.)
+func add_leadership_indicator(indicator_text: String = "👑", color: Color = Color.GOLD) -> bool:
+	var data := StatusIndicatorData.create_leadership_indicator(indicator_text, color)
+	return add_status_indicator("leadership", data)
+
+## Remove leadership indicator
+func remove_leadership_indicator(animate: bool = true) -> bool:
+	return remove_status_indicator("leadership", animate)
+
+## Add team indicator
+func add_team_indicator(team_color: Color) -> bool:
+	var data := StatusIndicatorData.create_team_indicator(team_color)
+	return add_status_indicator("team", data)
+
+## Add buff indicator
+func add_buff_indicator(buff_id: String, buff_text: String, color: Color = Color.GREEN) -> bool:
+	var data := StatusIndicatorData.create_buff_indicator(buff_text, color)
+	return add_status_indicator("buff_" + buff_id, data)
+
+## Add debuff indicator
+func add_debuff_indicator(debuff_id: String, debuff_text: String, color: Color = Color.RED) -> bool:
+	var data := StatusIndicatorData.create_debuff_indicator(debuff_text, color)
+	return add_status_indicator("debuff_" + debuff_id, data)
+
+## Add temporary status indicator that auto-removes
+func add_temporary_indicator(indicator_id: String, text: String, color: Color = Color.YELLOW, duration: float = 3.0) -> bool:
+	var data := StatusIndicatorData.create_temporary_indicator(text, color, duration)
+	return add_status_indicator(indicator_id, data)
 
 func _exit_tree() -> void:
 	# Unregister from PlayerManager for proper cleanup

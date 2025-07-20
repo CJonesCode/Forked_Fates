@@ -17,12 +17,16 @@ var respawn_manager: RespawnManager = null
 @export var use_item_spawner: bool = true
 @export var use_victory_conditions: bool = true
 @export var use_respawn_system: bool = true
+@export var leadership_update_frequency: float = 1.0  # Update leadership every second
 
 # Arena and spawn configuration (assigned by subclass or found automatically)
 var arena: Node2D = null
 var spawn_points: Node2D = null
 var respawn_points: Node2D = null
 var item_spawn_points: Node2D = null
+
+# Leadership tracking
+var leadership_update_timer: float = 0.0
 
 # Physics minigame signals
 signal player_spawned(player: BasePlayer)
@@ -57,6 +61,14 @@ func _ready() -> void:
 		"Pick up weapons dropped by others",
 		"Use the environment to your benefit"
 	]
+
+func _process(delta: float) -> void:
+	# Periodic leadership tracking updates
+	if use_leadership_tracking and is_active and not is_paused:
+		leadership_update_timer += delta
+		if leadership_update_timer >= leadership_update_frequency:
+			leadership_update_timer = 0.0
+			update_leadership_tracking()
 
 ## Initialize physics minigame with standard managers
 func _on_initialize(minigame_context: MinigameContext) -> void:
@@ -288,6 +300,79 @@ func _on_victory_achieved(winner_data: Dictionary) -> void:
 	
 	# End the minigame
 	end_minigame(result)
+
+## Helper method to update leadership based on current game state
+## Override this in subclasses to define leadership criteria
+func update_leadership_tracking() -> void:
+	if not use_leadership_tracking:
+		return
+	
+	var new_leader = _determine_current_leader()
+	if new_leader != current_leader:
+		if new_leader:
+			award_leadership(new_leader)
+		else:
+			remove_leadership()
+
+## Determine who should be the leader based on victory conditions
+## Override this in subclasses for custom leadership logic
+func _determine_current_leader() -> BasePlayer:
+	if not victory_condition_manager or not player_spawner:
+		return null
+	
+	var eligible_players = _get_eligible_players()
+	if eligible_players.is_empty():
+		return null
+	
+	# Default: leader based on victory condition type
+	match victory_condition_manager.victory_type:
+		VictoryConditionManager.VictoryType.ELIMINATION:
+			return _get_elimination_leader(eligible_players)
+		VictoryConditionManager.VictoryType.SCORE_BASED:
+			return _get_score_leader(eligible_players)
+		_:
+			return null
+
+## Get eligible players for leadership
+func _get_eligible_players() -> Array[BasePlayer]:
+	var eligible: Array[BasePlayer] = []
+	if player_spawner:
+		var all_players = player_spawner.get_all_players()
+		for player in all_players:
+			if player and player.player_data and player.player_data.is_alive:
+				eligible.append(player)
+	return eligible
+
+## Get leader for elimination games (most lives, then most kills)
+func _get_elimination_leader(players: Array[BasePlayer]) -> BasePlayer:
+	var leader: BasePlayer = null
+	var best_lives: int = -1
+	var best_kills: int = -1
+	
+	for player in players:
+		var lives = player.player_data.current_lives
+		var kills = player.player_data.player_statistics.kills
+		
+		if lives > best_lives or (lives == best_lives and kills > best_kills):
+			leader = player
+			best_lives = lives
+			best_kills = kills
+	
+	return leader
+
+## Get leader for score-based games
+func _get_score_leader(players: Array[BasePlayer]) -> BasePlayer:
+	var leader: BasePlayer = null
+	var best_score: int = -1
+	
+	for player in players:
+		var score = player.player_data.player_statistics.score
+		if score > best_score:
+			leader = player
+			best_score = score
+	
+	return leader
+
 
 ## Override damage handling for physics minigames - apply damage directly to player health
 func _on_damage_reported(victim_id: int, attacker_id: int, damage: int, source_name: String, victim_data: PlayerData) -> void:
