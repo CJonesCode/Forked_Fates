@@ -59,17 +59,32 @@ func get_object(scene_path: String) -> Node:
 	
 	# Try to get from pool first
 	if not pool.is_empty():
-		object = pool.pop_back()
+		# Find a valid object that's not destroyed
+		for i in range(pool.size() - 1, -1, -1):
+			var candidate = pool[i]
+			# Check if object is destroyed (if it has that property)
+			if candidate.has_method("get") and "is_destroyed" in candidate and candidate.is_destroyed:
+				# Remove destroyed object from pool
+				pool.remove_at(i)
+				candidate.queue_free()
+				Logger.debug("Removed destroyed object from pool: " + scene_path, "ObjectPool")
+				continue
+			
+			# Found a valid object
+			object = pool.pop_at(i)
+			break
 		
-		# Update the actual pools dictionary with the modified array
+		# Update the pools dictionary
 		pools[scene_path] = pool
 		
-		_activate_pooled_object(object)
-		object_retrieved.emit(scene_path, object)
-		_update_stats(scene_path, "retrieved")
-		Logger.debug("Retrieved object from pool: " + scene_path, "ObjectPool")
-	else:
-		# Create new object if pool is empty
+		if object:
+			_activate_pooled_object(object)
+			object_retrieved.emit(scene_path, object)
+			_update_stats(scene_path, "retrieved")
+			Logger.debug("Retrieved object from pool: " + scene_path, "ObjectPool")
+	
+	# Create new object if we didn't find a valid one in the pool
+	if not object:
 		object = _create_new_object(scene_path)
 		if object:
 			object_created.emit(scene_path, object)
@@ -97,7 +112,7 @@ func return_object(object: Node, scene_path: String) -> bool:
 	# Prepare object for pool storage
 	_deactivate_pooled_object(object)
 	
-	# Remove from scene tree but don't free
+	# Remove from scene tree but don't free (object should already be removed from scene)
 	if object.get_parent():
 		object.get_parent().remove_child(object)
 	
@@ -240,6 +255,10 @@ func _create_new_object(scene_path: String) -> Node:
 
 ## Activate object retrieved from pool
 func _activate_pooled_object(object: Node) -> void:
+	# Ensure object is removed from any parent before activation
+	if object.get_parent():
+		object.get_parent().remove_child(object)
+	
 	# Reset object state for reuse
 	if object.has_method("reset_for_pool"):
 		object.reset_for_pool()

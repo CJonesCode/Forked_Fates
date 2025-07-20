@@ -24,7 +24,7 @@ extends Resource
 
 # Shared party inventory and effects
 @export var party_inventory: Array[String] = []  # Shared items/resources
-@export var active_party_effects: Array[String] = []  # Global buffs/debuffs affecting all players
+@export var active_party_effects: Array[Dictionary] = []  # Global buffs/debuffs affecting all players
 @export var party_achievements: Array[String] = []  # Achievements earned by the party as a whole
 
 # Current voting/decision state

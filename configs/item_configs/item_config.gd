@@ -33,6 +33,13 @@ enum ItemType {
 @export var bullets_per_shot: int = 1
 @export var muzzle_flash_duration: float = 0.1
 
+# Magazine-based ammo system
+@export_group("Ammo System")
+@export var auto_reload: bool = false  # Auto-reload when magazine is empty
+@export var infinite_total_ammo: bool = false  # Infinite total ammo (but limited magazine)
+@export var magazine_size: int = -1  # Shots per magazine (-1 uses ammo_capacity)
+@export var reload_time: float = 1.0  # Time to reload in seconds
+
 # Melee weapon properties (for bat-style weapons)
 @export_group("Melee Properties")
 @export var swing_range: float = 80.0

@@ -17,6 +17,7 @@ var shooter_id: int = -1  # ID instead of object reference
 var is_pooled: bool = false
 var lifetime_timer: float = 0.0
 var ricochet_count: int = 0
+var is_destroyed: bool = false  # Flag to prevent race conditions
 
 # Projectile enhancements
 var penetration_count: int = 0
@@ -49,6 +50,10 @@ func _ready() -> void:
 	Logger.debug("Bullet ready with projectile mechanics", "Bullet")
 
 func _physics_process(delta: float) -> void:
+	# Don't process destroyed bullets
+	if is_destroyed:
+		return
+	
 	# Move bullet
 	if velocity_vector.length() > 0:
 		linear_velocity = velocity_vector
@@ -70,6 +75,7 @@ func initialize(direction: Vector2, spawn_position: Vector2, bullet_shooter_id: 
 	lifetime_timer = 0.0
 	ricochet_count = 0
 	penetration_count = 0
+	is_destroyed = false  # Reset destroyed flag
 	
 	# Set collision exclusions - don't hit shooter initially
 	var shooter: BasePlayer = PlayerManager.get_player(shooter_id)
@@ -94,6 +100,10 @@ func initialize(direction: Vector2, spawn_position: Vector2, bullet_shooter_id: 
 
 ## Handle collision with bodies
 func _on_body_shape_entered(body_rid: RID, body: Node, body_shape_index: int, local_shape_index: int) -> void:
+	# Don't process collisions for destroyed bullets
+	if is_destroyed:
+		return
+		
 	Logger.debug("Bullet collision with: " + body.name + " (" + body.get_class() + ")", "Bullet")
 	
 	# Don't hit the shooter immediately
@@ -198,21 +208,50 @@ func _handle_ricochet(surface: Node) -> void:
 
 ## Destroy bullet and return to pool if applicable
 func _destroy_bullet() -> void:
+	# Prevent multiple destroy calls
+	if is_destroyed:
+		return
+	
+	# Mark as destroyed immediately to prevent further processing
+	is_destroyed = true
+	
 	Logger.debug("Destroying bullet (pooled: " + str(is_pooled) + ")", "Bullet")
 	
-	# Stop trail particles
+	# Stop trail particles immediately
 	if trail_particles:
 		trail_particles.emitting = false
 	
-	# Return to pool or destroy (deferred to avoid physics callback issues)
+	# Stop movement immediately
+	linear_velocity = Vector2.ZERO
+	velocity_vector = Vector2.ZERO
+	
+	# Hide bullet immediately
+	visible = false
+	
+	# Defer physics-related cleanup to avoid callback conflicts
+	call_deferred("_deferred_cleanup_and_return")
+
+## Deferred cleanup method that handles physics-sensitive operations
+func _deferred_cleanup_and_return() -> void:
+	# Disable processing
+	set_physics_process(false)
+	set_process(false)
+	
+	# Disable collision safely
+	contact_monitor = false
+	max_contacts_reported = 0
+	collision_layer = 0
+	collision_mask = 0
+	
+	# Remove from scene tree safely
+	if get_parent():
+		get_parent().remove_child(self)
+	
+	# Return to pool or destroy
 	if is_pooled:
-		call_deferred("_deferred_return_to_pool")
+		PoolManager.return_item(self, "bullet")
 	else:
 		queue_free()
-
-## Deferred method to return bullet to pool (avoids physics callback issues)
-func _deferred_return_to_pool() -> void:
-	PoolManager.return_item(self, "bullet")
 
 ## Reset bullet for object pooling
 func reset_for_pool() -> void:
@@ -224,6 +263,7 @@ func reset_for_pool() -> void:
 	lifetime_timer = 0.0
 	ricochet_count = 0
 	penetration_count = 0
+	is_destroyed = false  # Reset destroyed flag
 	
 	# Reset position and rotation
 	global_position = Vector2.ZERO
@@ -241,6 +281,10 @@ func reset_for_pool() -> void:
 	collision_layer = CollisionLayers.Layer.PROJECTILES
 	collision_mask = CollisionLayers.Mask.PROJECTILE_TARGETS
 	
+	# Ensure contact monitoring is enabled for collision detection
+	contact_monitor = true
+	max_contacts_reported = 10
+	
 	# Stop trail particles
 	if trail_particles:
 		trail_particles.emitting = false
@@ -252,6 +296,10 @@ func reset_for_pool() -> void:
 func activate_from_pool() -> void:
 	# Ensure collision is properly configured
 	CollisionLayers.setup_bullet(self)
+	
+	# Force enable contact monitoring for collision detection
+	contact_monitor = true
+	max_contacts_reported = 10
 	
 	# Start trail particles
 	if trail_particles:

@@ -7,6 +7,11 @@ extends Control
 @onready var back_button: Button = $UIContainer/BackButton
 @onready var test_minigame_button: Button = $UIContainer/TestMinigameButton
 
+# Voting UI elements (created dynamically)
+var voting_panel: Control = null
+var voting_buttons: Array[Button] = []
+var current_voting_decision: int = -1
+
 # MVP Map data structure (using simple dictionaries)
 var map_data: Dictionary = {}
 var current_node_id: String = ""
@@ -285,8 +290,13 @@ func _on_node_pressed(node_id: String) -> void:
 		Logger.warning("Cannot move to node: " + node_id, "MapView")
 		return
 	
-	# Move to the node
-	_move_to_node(node_id)
+	# Check if there are multiple available nodes - trigger voting
+	var available_nodes: Array[String] = _get_available_nodes()
+	if available_nodes.size() > 1:
+		_start_node_voting(available_nodes)
+	else:
+		# Single option - move directly
+		_move_to_node(node_id)
 
 ## Check if player can move to a specific node
 func _can_move_to_node(target_node_id: String) -> bool:
@@ -345,6 +355,174 @@ func _start_node_minigame(node_data: Dictionary) -> void:
 		minigame_type = "sudden_death"  # Boss uses same minigame for now
 	
 	GameManager.start_minigame(minigame_type)
+
+## Get all currently available nodes for movement
+func _get_available_nodes() -> Array[String]:
+	var available: Array[String] = []
+	var current_node_data = map_data.nodes[current_node_id]
+	
+	for connected_id in current_node_data.connections_out:
+		if _can_move_to_node(connected_id):
+			available.append(connected_id)
+	
+	return available
+
+## Start voting process for node selection
+func _start_node_voting(available_node_ids: Array[String]) -> void:
+	Logger.game_flow("Starting node voting with " + str(available_node_ids.size()) + " options", "MapView")
+	
+	# Add voting decision to party progress
+	var party_progress: PartyProgressData = GameManager.get_party_progress()
+	if party_progress:
+		var node_ids_int: Array[int] = []
+		for node_id in available_node_ids:
+			# Extract numeric part from node ID (e.g., "layer_1_node_2" -> 2)
+			var parts = node_id.split("_")
+			if parts.size() >= 3:
+				node_ids_int.append(int(parts[2]))
+			else:
+				node_ids_int.append(0)
+		
+		current_voting_decision = party_progress.add_node_voting(node_ids_int, 30)
+		
+		# Create voting UI
+		_create_voting_ui(available_node_ids)
+		
+		# Start voting timer
+		_start_voting_timer()
+
+## Create voting UI for node selection
+func _create_voting_ui(available_node_ids: Array[String]) -> void:
+	# Remove existing voting panel if present
+	if voting_panel:
+		voting_panel.queue_free()
+		voting_panel = null
+	
+	# Create voting panel using UIFactory
+	var panel_config = UIFactory.UIElementConfig.new()
+	panel_config.element_name = "VotingPanel"
+	voting_panel = UIFactory.create_ui_element(UIFactory.UIElementType.PANEL, panel_config) as Control
+	
+	if voting_panel:
+		# Position panel at bottom of screen
+		voting_panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+		voting_panel.size.y = 120
+		voting_panel.position.y -= 120
+		
+		# Add title label
+		var title_config = UIFactory.UIElementConfig.new()
+		title_config.element_name = "VotingTitle"
+		title_config.text = "Vote for Next Node:"
+		title_config.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var title_label = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, title_config)
+		if title_label:
+			voting_panel.add_child(title_label)
+			title_label.position = Vector2(0, 10)
+			title_label.size = Vector2(voting_panel.size.x, 30)
+		
+		# Create voting buttons
+		voting_buttons.clear()
+		var button_width: float = voting_panel.size.x / available_node_ids.size()
+		
+		for i in range(available_node_ids.size()):
+			var node_id: String = available_node_ids[i]
+			var node_data = map_data.nodes[node_id]
+			
+			var button_config = UIFactory.UIElementConfig.new()
+			button_config.element_name = "VoteButton_" + node_id
+			button_config.text = node_data.display_name
+			var vote_button = UIFactory.create_ui_element(UIFactory.UIElementType.BUTTON, button_config) as Button
+			
+			if vote_button:
+				voting_panel.add_child(vote_button)
+				vote_button.position = Vector2(i * button_width + 10, 50)
+				vote_button.size = Vector2(button_width - 20, 40)
+				
+				# Connect vote handler
+				var node_index: int = i
+				vote_button.pressed.connect(_on_vote_button_pressed.bind(node_index))
+				voting_buttons.append(vote_button)
+		
+		# Add voting panel to the map container
+		map_container.add_child(voting_panel)
+		Logger.system("Created voting UI with " + str(voting_buttons.size()) + " options", "MapView")
+
+## Handle vote button press
+func _on_vote_button_pressed(option_index: int) -> void:
+	var party_progress: PartyProgressData = GameManager.get_party_progress()
+	if party_progress and current_voting_decision >= 0:
+		# TODO: Get actual player ID for local player
+		var local_player_id: int = 0  # For now, assume player 0 is local
+		
+		var voted: bool = party_progress.vote_for_node(current_voting_decision, local_player_id, option_index)
+		if voted:
+			Logger.game_flow("Player " + str(local_player_id) + " voted for option " + str(option_index), "MapView")
+			
+			# Disable all voting buttons after voting
+			for button in voting_buttons:
+				button.disabled = true
+			
+			# Check if voting is complete
+			_check_voting_completion()
+
+## Start voting timer and monitor completion
+func _start_voting_timer() -> void:
+	# Create a timer to check voting completion
+	var timer: Timer = Timer.new()
+	timer.wait_time = 1.0  # Check every second
+	timer.timeout.connect(_check_voting_completion)
+	timer.autostart = true
+	add_child(timer)
+
+## Check if voting is complete and resolve if needed
+func _check_voting_completion() -> void:
+	var party_progress: PartyProgressData = GameManager.get_party_progress()
+	if not party_progress or current_voting_decision < 0:
+		return
+	
+	if party_progress.is_voting_complete(current_voting_decision):
+		_resolve_voting()
+
+## Resolve completed voting and move to chosen node
+func _resolve_voting() -> void:
+	var party_progress: PartyProgressData = GameManager.get_party_progress()
+	if not party_progress or current_voting_decision < 0:
+		return
+	
+	# Get voting results
+	var results: Dictionary = party_progress.get_voting_results(current_voting_decision)
+	var chosen_option: int = party_progress.resolve_voting(current_voting_decision)
+	
+	Logger.game_flow("Voting completed. Chosen option: " + str(chosen_option), "MapView")
+	Logger.system("Voting results: " + str(results), "MapView")
+	
+	# Get the available nodes and select the chosen one
+	var available_nodes: Array[String] = _get_available_nodes()
+	if chosen_option >= 0 and chosen_option < available_nodes.size():
+		var chosen_node_id: String = available_nodes[chosen_option]
+		
+		# Clean up voting UI
+		_cleanup_voting_ui()
+		
+		# Move to chosen node
+		_move_to_node(chosen_node_id)
+	else:
+		Logger.error("Invalid voting result: " + str(chosen_option), "MapView")
+		_cleanup_voting_ui()
+
+## Clean up voting UI
+func _cleanup_voting_ui() -> void:
+	if voting_panel:
+		voting_panel.queue_free()
+		voting_panel = null
+	
+	voting_buttons.clear()
+	current_voting_decision = -1
+	
+	# Remove any voting timers
+	for child in get_children():
+		if child is Timer and child.timeout.is_connected(_check_voting_completion):
+			child.queue_free()
 
 func _on_back_button_pressed() -> void:
 	Logger.game_flow("Returning to main menu", "MapView")

@@ -351,7 +351,7 @@ func _get_elimination_leader(players: Array[BasePlayer]) -> BasePlayer:
 	
 	for player in players:
 		var lives = player.player_data.current_lives
-		var kills = player.player_data.player_statistics.kills
+		var kills = 0  # Default to 0 since we don't track kills in lifetime_stats during minigames
 		
 		if lives > best_lives or (lives == best_lives and kills > best_kills):
 			leader = player
@@ -366,7 +366,7 @@ func _get_score_leader(players: Array[BasePlayer]) -> BasePlayer:
 	var best_score: int = -1
 	
 	for player in players:
-		var score = player.player_data.player_statistics.score
+		var score = 0  # Default to 0 since we don't track scores in lifetime_stats during minigames
 		if score > best_score:
 			leader = player
 			best_score = score

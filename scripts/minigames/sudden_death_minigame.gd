@@ -157,12 +157,161 @@ func _on_physics_victory(winner_data: Dictionary, result: MinigameResult) -> voi
 		if winner_data_obj:
 			result.statistics["winner_name"] = winner_data_obj.player_name
 	
+	# Create comprehensive MinigameStats for each participating player
+	var all_participants: Array[int] = context.get_player_ids()
+	for i in range(all_participants.size()):
+		var player_id: int = all_participants[i]
+		var player_data: PlayerData = context.get_player_data(player_id)
+		if player_data:
+			var minigame_stats: MinigameStats = _create_elimination_stats(
+				player_id, 
+				player_data.player_name, 
+				i + 1,  # Rank (1st, 2nd, etc.) - TODO: Calculate actual final rankings
+				player_data.player_id == winner_data.get("winner_id", -1)
+			)
+			result.add_player_stats(minigame_stats)
+	
+	# Add updated party progress to result for comprehensive data flow
+	result.party_progress = GameManager.get_party_progress()
+	
 	EventBus.minigame_ended.emit(result.winners[0] if not result.winners.is_empty() else -1, {
 		"minigame_type": "sudden_death",
 		"duration": game_timer,
 		"winner_name": result.statistics.get("winner_name", "No One"),
 		"weapons_used": result.statistics.get("weapons_spawned", 0)
 	})
+
+## Create detailed elimination statistics for a player
+func _create_elimination_stats(player_id: int, player_name: String, rank: int, was_winner: bool) -> MinigameStats:
+	var stats: MinigameStats = MinigameStats.new(player_id, player_name)
+	
+	# Core performance metrics
+	stats.rank = rank
+	stats.score = _calculate_player_score(player_id)
+	stats.performance_rating = _get_performance_rating(rank, was_winner)
+	
+	# Sudden Death specific statistics
+	stats.add_stat("survival_time", game_timer if was_winner else 0.0, "time")
+	stats.add_stat("eliminations", _get_player_eliminations(player_id))
+	stats.add_stat("deaths", _get_player_deaths(player_id))
+	stats.add_stat("damage_dealt", _get_player_damage_dealt(player_id))
+	stats.add_stat("damage_taken", _get_player_damage_taken(player_id))
+	stats.add_stat("weapons_used", _get_player_weapons_used(player_id))
+	
+	# Add achievements based on performance
+	_add_elimination_achievements(stats, player_id, was_winner)
+	
+	# Add rewards based on rank and performance
+	_add_elimination_rewards(stats, rank, was_winner)
+	
+	# Add display formatting hints
+	_setup_elimination_display_data(stats)
+	
+	return stats
+
+## Calculate score for a player based on performance
+func _calculate_player_score(player_id: int) -> int:
+	var base_score: int = 100  # Base participation score
+	var eliminations: int = _get_player_eliminations(player_id)
+	var deaths: int = _get_player_deaths(player_id)
+	var damage_dealt: int = _get_player_damage_dealt(player_id)
+	
+	# Score formula: base + (eliminations * 50) + (damage_dealt / 10) - (deaths * 25)
+	var score: int = base_score + (eliminations * 50) + (damage_dealt / 10) - (deaths * 25)
+	return max(0, score)  # Ensure non-negative score
+
+## Get performance rating based on rank and winner status
+func _get_performance_rating(rank: int, was_winner: bool) -> String:
+	if was_winner:
+		return "Excellent"
+	elif rank <= 2:
+		return "Good"
+	elif rank <= 3:
+		return "Average"
+	else:
+		return "Poor"
+
+## Add achievements based on player performance
+func _add_elimination_achievements(stats: MinigameStats, player_id: int, was_winner: bool) -> void:
+	var eliminations: int = _get_player_eliminations(player_id)
+	var deaths: int = _get_player_deaths(player_id)
+	var damage_dealt: int = _get_player_damage_dealt(player_id)
+	
+	if was_winner:
+		stats.achievements.append("Last One Standing")
+	
+	if eliminations >= 3:
+		stats.achievements.append("Triple Eliminator")
+	elif eliminations >= 2:
+		stats.achievements.append("Double Trouble")
+	
+	if deaths == 0:
+		stats.achievements.append("Untouchable")
+	
+	if damage_dealt >= 200:
+		stats.achievements.append("Heavy Hitter")
+	
+	if eliminations > 0 and deaths == 0:
+		stats.achievements.append("Perfect Round")
+
+## Add rewards based on performance
+func _add_elimination_rewards(stats: MinigameStats, rank: int, was_winner: bool) -> void:
+	if was_winner:
+		stats.rewards_earned.append("victory_bonus")
+	
+	if rank <= 2:
+		stats.rewards_earned.append("health_boost")
+	
+	# Special rewards for achievements
+	if "Triple Eliminator" in stats.achievements:
+		stats.rewards_earned.append("weapon_mastery")
+	
+	if "Untouchable" in stats.achievements:
+		stats.rewards_earned.append("defensive_bonus")
+
+## Setup display formatting hints for UI
+func _setup_elimination_display_data(stats: MinigameStats) -> void:
+	stats.display_data["highlight_stats"] = ["eliminations", "survival_time", "damage_dealt"]
+	stats.display_data["format_types"] = {
+		"survival_time": "time",
+		"damage_dealt": "number",
+		"damage_taken": "number"
+	}
+	stats.display_data["stat_labels"] = {
+		"eliminations": "Enemies Defeated",
+		"deaths": "Times Defeated",
+		"damage_dealt": "Damage Output",
+		"damage_taken": "Damage Received",
+		"weapons_used": "Weapons Collected",
+		"survival_time": "Survival Time"
+	}
+
+## Get player elimination count (placeholder - integrate with damage system)
+func _get_player_eliminations(player_id: int) -> int:
+	# TODO: Track actual eliminations from damage system
+	return 0
+
+## Get player death count (from current lives)
+func _get_player_deaths(player_id: int) -> int:
+	var player_data: PlayerData = context.get_player_data(player_id)
+	if player_data:
+		return player_data.max_lives - player_data.current_lives
+	return 0
+
+## Get damage dealt by player (placeholder - integrate with damage system)
+func _get_player_damage_dealt(player_id: int) -> int:
+	# TODO: Track actual damage dealt from damage system
+	return 0
+
+## Get damage taken by player (placeholder - integrate with damage system)
+func _get_player_damage_taken(player_id: int) -> int:
+	# TODO: Track actual damage taken from damage system  
+	return 0
+
+## Get weapons used by player (placeholder - integrate with item system)
+func _get_player_weapons_used(player_id: int) -> int:
+	# TODO: Track actual weapons picked up/used
+	return 0
 
 ## Handle player death for Sudden Death specific rules (3 lives elimination)
 ## Lives Semantics: 3 lives = 3 deaths allowed before elimination

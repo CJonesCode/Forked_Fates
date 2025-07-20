@@ -460,7 +460,7 @@ func add_status_indicator(indicator_id: String, indicator_data: StatusIndicatorD
 func remove_status_indicator(indicator_id: String, animate: bool = true) -> bool:
 	if not status_indicators:
 		return false
-	return status_indicators.remove_indicator(indicator_id, animate)
+	return await status_indicators.remove_indicator(indicator_id, animate)
 
 ## Update an existing status indicator
 func update_status_indicator(indicator_id: String, new_data: StatusIndicatorData) -> bool:
@@ -483,7 +483,7 @@ func get_active_status_indicators() -> Array[String]:
 ## Clear all status indicators
 func clear_status_indicators(animate: bool = true) -> void:
 	if status_indicators:
-		status_indicators.clear_indicators(animate)
+		await status_indicators.clear_indicators(animate)
 
 ## Add leadership indicator (crown, lead, etc.)
 func add_leadership_indicator(indicator_text: String = "👑", color: Color = Color.GOLD) -> bool:
@@ -492,7 +492,7 @@ func add_leadership_indicator(indicator_text: String = "👑", color: Color = Co
 
 ## Remove leadership indicator
 func remove_leadership_indicator(animate: bool = true) -> bool:
-	return remove_status_indicator("leadership", animate)
+	return await remove_status_indicator("leadership", animate)
 
 ## Add team indicator
 func add_team_indicator(team_color: Color) -> bool:

@@ -119,7 +119,7 @@ func _demo_multiple_indicators() -> void:
 
 func _clear_all_indicators() -> void:
 	for player in demo_players:
-		player.clear_status_indicators(false)  # No animation for quick clearing
+		await player.clear_status_indicators(false)  # No animation for quick clearing
 
 func _on_demo_complete() -> void:
 	Logger.system("Status indicator demonstration complete", "StatusIndicatorDemo") 

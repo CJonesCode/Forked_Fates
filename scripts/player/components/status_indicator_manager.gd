@@ -1,6 +1,9 @@
 class_name StatusIndicatorManager
 extends Node2D
 
+# Preload PlayerStatusIndicator script to ensure it's available
+const PlayerStatusIndicatorScript = preload("res://scripts/player/components/status_indicator.gd")
+
 ## Universal status indicator system for players
 ## Displays multiple indicators above player characters using a flexible container
 ## Supports text, sprites, and other visual elements for various status types
@@ -13,9 +16,9 @@ extends Node2D
 ## • 0.0 = remove immediately 
 ## • >0.0 = remove after X seconds
 
-# Core container and animation
-@onready var indicator_container: HBoxContainer = $IndicatorContainer
-@onready var animation_player: AnimationPlayer = $AnimationPlayer
+# Core container and animation (created dynamically if not present)
+var indicator_container: HBoxContainer
+var animation_player: AnimationPlayer
 
 # Configuration
 var float_height: float = -50.0
@@ -25,7 +28,7 @@ var bob_amplitude: float = 3.0
 var bob_speed: float = 2.0
 
 # State tracking
-var active_indicators: Dictionary = {}  # indicator_id -> StatusIndicator
+var active_indicators: Dictionary = {}  # indicator_id -> PlayerStatusIndicator
 var auto_remove_timers: Dictionary = {}  # indicator_id -> float (remaining time)
 var base_offset: Vector2
 var bob_timer: float = 0.0
@@ -103,7 +106,7 @@ func add_indicator(indicator_id: String, indicator_data: StatusIndicatorData) ->
 		Logger.warning("Indicator already exists: " + indicator_id, "StatusIndicatorManager")
 		return false
 	
-	var indicator: StatusIndicator = _create_indicator(indicator_data)
+	var indicator = _create_indicator(indicator_data)
 	if not indicator:
 		Logger.error("Failed to create indicator: " + indicator_id, "StatusIndicatorManager")
 		return false
@@ -130,7 +133,7 @@ func remove_indicator(indicator_id: String, animate: bool = true) -> bool:
 	if not active_indicators.has(indicator_id):
 		return false
 	
-	var indicator: StatusIndicator = active_indicators[indicator_id]
+	var indicator = active_indicators[indicator_id]
 	active_indicators.erase(indicator_id)
 	
 	# Clean up auto-removal timer if it exists
@@ -157,7 +160,7 @@ func update_indicator(indicator_id: String, new_data: StatusIndicatorData) -> bo
 	if not active_indicators.has(indicator_id):
 		return false
 	
-	var indicator: StatusIndicator = active_indicators[indicator_id]
+	var indicator = active_indicators[indicator_id]
 	indicator.update_data(new_data)
 	
 	Logger.debug("Updated indicator: " + indicator_id, "StatusIndicatorManager")
@@ -167,7 +170,7 @@ func update_indicator(indicator_id: String, new_data: StatusIndicatorData) -> bo
 func clear_indicators(animate: bool = true) -> void:
 	var indicator_ids: Array = active_indicators.keys()
 	for indicator_id in indicator_ids:
-		remove_indicator(indicator_id, animate)
+		await remove_indicator(indicator_id, animate)
 	
 	# Clear any remaining timers
 	auto_remove_timers.clear()
@@ -187,7 +190,7 @@ func get_active_indicators() -> Array[String]:
 func get_indicators_by_category(category: IndicatorCategory) -> Array[String]:
 	var result: Array[String] = []
 	for indicator_id in active_indicators.keys():
-		var indicator: StatusIndicator = active_indicators[indicator_id]
+		var indicator = active_indicators[indicator_id]
 		if indicator.get_category() == category:
 			result.append(indicator_id)
 	return result
@@ -226,13 +229,13 @@ func detach_from_player() -> void:
 	Logger.debug("StatusIndicatorManager detached from player", "StatusIndicatorManager")
 
 ## Create a specific indicator based on data
-func _create_indicator(indicator_data: StatusIndicatorData) -> StatusIndicator:
-	var indicator: StatusIndicator = StatusIndicator.new()
+func _create_indicator(indicator_data: StatusIndicatorData):
+	var indicator = PlayerStatusIndicatorScript.new()
 	indicator.setup_from_data(indicator_data)
 	return indicator
 
 ## Animate indicator entrance
-func _animate_indicator_entrance(indicator: StatusIndicator) -> void:
+func _animate_indicator_entrance(indicator) -> void:
 	if not indicator:
 		return
 	
@@ -250,7 +253,7 @@ func _animate_indicator_entrance(indicator: StatusIndicator) -> void:
 	tween.tween_property(indicator, "modulate:a", 1.0, 0.3)
 
 ## Animate indicator exit
-func _animate_indicator_exit(indicator: StatusIndicator) -> void:
+func _animate_indicator_exit(indicator) -> void:
 	if not indicator:
 		return
 	

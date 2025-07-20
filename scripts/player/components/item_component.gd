@@ -260,7 +260,6 @@ func get_item_hold_position() -> Vector2:
 	offset.x *= facing_direction  # Flip based on facing direction
 	
 	var world_pos = player.global_position + offset
-	Logger.debug("get_item_hold_position: player_pos=" + str(player.global_position) + " offset=" + str(offset) + " world_pos=" + str(world_pos), "ItemComponent")
 	return world_pos
 
 ## Check if player can pick up items

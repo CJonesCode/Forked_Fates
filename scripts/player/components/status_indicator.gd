@@ -1,4 +1,4 @@
-class_name StatusIndicator
+class_name PlayerStatusIndicator
 extends Control
 
 ## Individual status indicator that displays a single status element

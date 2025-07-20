@@ -31,6 +31,9 @@ var session_id: String = ""
 var current_map_node: int = 0
 var current_minigame: String = ""
 
+# Party-wide progress tracking
+var party_progress: PartyProgressData
+
 # Player management
 var players: Dictionary = {} # player_id -> PlayerData
 var max_players: int = 4
@@ -265,6 +268,11 @@ func _initialize_session() -> void:
 	current_map_node = 0
 	players.clear()
 	
+	# Initialize party progress tracking
+	party_progress = PartyProgressData.new()
+	party_progress.party_size = max_players
+	party_progress.session_start_time = Time.get_unix_time_from_system()
+	
 	# Only create test players for local mode
 	# Multiplayer players will be added when they join the lobby
 	if not network_enabled:
@@ -465,6 +473,32 @@ func _on_player_lives_changed(player_id: int, new_lives: int) -> void:
 
 func _on_minigame_ended(winner_id: int, results: Dictionary) -> void:
 	Logger.game_flow("Minigame ended. Winner: " + str(winner_id), "GameManager")
+	
+	# Update party progress with minigame results
+	if party_progress and winner_id != -1:
+		var winner_data: PlayerData = get_player_data(winner_id)
+		var winner_name: String = winner_data.player_name if winner_data else "Unknown"
+		var minigame_type: String = results.get("minigame_type", current_minigame)
+		var all_participants: Array[int] = []
+		
+		# Collect all participating player IDs
+		for player_data in players.values():
+			all_participants.append(player_data.player_id)
+		
+		# Record the minigame result in party progress
+		party_progress.record_minigame_result(winner_id, winner_name, minigame_type, all_participants)
+	
+	# Update individual player progress from minigame results
+	# TODO: This should integrate with MinigameStats when they're implemented
+	for player_data in players.values():
+		var was_winner: bool = (player_data.player_id == winner_id)
+		var score: int = results.get("score_" + str(player_data.player_id), 0)
+		var rank: int = results.get("rank_" + str(player_data.player_id), 0)
+		
+		# Update map progress
+		if player_data.map_progress and player_data.map_progress.has_method("add_minigame_result"):
+			player_data.map_progress.add_minigame_result(score, rank, was_winner)
+	
 	# Return to map view
 	_set_current_state(GameState.MAP_VIEW)
 
@@ -658,3 +692,7 @@ func get_network_player_names() -> Array[String]:
 
 func is_multiplayer_session() -> bool:
 	return network_enabled and connected_players.size() > 1 
+
+## Get party progress data
+func get_party_progress() -> PartyProgressData:
+	return party_progress 

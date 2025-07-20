@@ -14,9 +14,17 @@ var projectile_lifetime: float = 10.0
 var can_ricochet: bool = false
 var max_ricochets: int = 2
 
+# Magazine-based ammo system properties
+var auto_reload: bool = false
+var infinite_total_ammo: bool = false
+var magazine_size: int = -1
+var reload_time: float = 1.0
+var is_reloading: bool = false
+
 # ID-based weapon state (no circular dependency)
 var is_thrown_projectile: bool = false
-var ammo_current: int = 0
+var ammo_current: int = 0  # Current shots in magazine
+var total_ammo: int = -1   # Total ammo remaining (-1 for infinite)
 var thrown_by_id: int = -1  # ID instead of object reference
 var throw_damage: int = 0
 var ricochet_count: int = 0
@@ -180,11 +188,25 @@ func _apply_weapon_config(config: ItemConfig) -> void:
 	can_ricochet = config.can_ricochet
 	max_ricochets = config.max_ricochets
 	
-	# Initialize ammo based on config
-	if ammo_capacity > 0:
+	# Apply magazine-based ammo system properties
+	auto_reload = config.auto_reload
+	infinite_total_ammo = config.infinite_total_ammo
+	magazine_size = config.magazine_size if config.magazine_size > 0 else config.ammo_capacity
+	reload_time = config.reload_time
+	
+	# Initialize ammo system
+	if magazine_size > 0:
+		ammo_current = magazine_size
+	elif ammo_capacity > 0:
 		ammo_current = ammo_capacity
 	
-	Logger.system("Applied weapon config: damage=" + str(base_damage) + ", fire_rate=" + str(fire_rate), "BaseWeapon")
+	# Initialize total ammo
+	if infinite_total_ammo:
+		total_ammo = -1  # Infinite
+	else:
+		total_ammo = ammo_capacity  # Limited to initial capacity
+	
+	Logger.system("Applied weapon config: damage=" + str(base_damage) + ", fire_rate=" + str(fire_rate) + ", auto_reload=" + str(auto_reload), "BaseWeapon")
 
 ## Extract weapon ID from scene name or class name
 func _get_weapon_id() -> String:
@@ -207,17 +229,25 @@ func _get_weapon_id() -> String:
 
 ## Check if weapon has ammo available
 func has_ammo() -> bool:
-	# Infinite ammo weapons (-1) always have ammo
-	if ammo_capacity == -1:
+	# Don't fire while reloading
+	if is_reloading:
+		return false
+	
+	# Infinite magazine weapons always have ammo
+	if ammo_capacity == -1 and magazine_size == -1:
 		return true
 	
-	# Limited ammo weapons check current ammo
+	# Check current magazine ammo
 	return ammo_current > 0
 
 ## Consume one unit of ammo
 func consume_ammo() -> bool:
-	# Infinite ammo weapons don't consume
-	if ammo_capacity == -1:
+	# Don't consume while reloading
+	if is_reloading:
+		return false
+	
+	# Infinite magazine weapons don't consume
+	if ammo_capacity == -1 and magazine_size == -1:
 		return true
 	
 	# Check if we have ammo to consume
@@ -225,14 +255,86 @@ func consume_ammo() -> bool:
 		ammo_depleted.emit()
 		return false
 	
-	# Consume ammo
+	# Consume ammo from magazine
 	ammo_current -= 1
 	
-	# Check if depleted after consumption
+	# Check if magazine is empty
 	if ammo_current <= 0:
 		ammo_depleted.emit()
+		
+		# Auto-reload if enabled and we have total ammo
+		if auto_reload and _can_reload():
+			_start_auto_reload()
 	
 	return true
+
+## Reload weapon magazine
+func reload() -> bool:
+	if is_reloading:
+		return false
+	
+	if not _can_reload():
+		return false
+	
+	if _is_magazine_full():
+		return false
+	
+	return _start_manual_reload()
+
+## Check if weapon can reload
+func _can_reload() -> bool:
+	# Infinite magazine weapons don't need reload
+	if ammo_capacity == -1 and magazine_size == -1:
+		return false
+	
+	# Check if we have total ammo to reload from
+	if infinite_total_ammo or total_ammo == -1:
+		return true  # Always can reload with infinite total ammo
+	
+	return total_ammo > 0  # Can reload if we have total ammo
+
+## Check if magazine is full
+func _is_magazine_full() -> bool:
+	var max_mag_size = magazine_size if magazine_size > 0 else ammo_capacity
+	return ammo_current >= max_mag_size
+
+## Start auto-reload process
+func _start_auto_reload() -> void:
+	is_reloading = true
+	Logger.debug("Auto-reloading " + item_name + "...", "BaseWeapon")
+	
+	# Use a timer for reload delay
+	var reload_timer = get_tree().create_timer(reload_time)
+	reload_timer.timeout.connect(_complete_reload)
+
+## Start manual reload process
+func _start_manual_reload() -> bool:
+	is_reloading = true
+	Logger.debug("Manually reloading " + item_name + "...", "BaseWeapon")
+	
+	# Use a timer for reload delay
+	var reload_timer = get_tree().create_timer(reload_time)
+	reload_timer.timeout.connect(_complete_reload)
+	
+	return true
+
+## Complete the reload process
+func _complete_reload() -> void:
+	is_reloading = false
+	
+	var max_mag_size = magazine_size if magazine_size > 0 else ammo_capacity
+	var ammo_needed = max_mag_size - ammo_current
+	
+	if infinite_total_ammo or total_ammo == -1:
+		# Infinite total ammo - just fill magazine
+		ammo_current = max_mag_size
+	else:
+		# Limited total ammo - transfer from total to magazine
+		var ammo_to_transfer = min(ammo_needed, total_ammo)
+		ammo_current += ammo_to_transfer
+		total_ammo -= ammo_to_transfer
+	
+	Logger.debug("Weapon reloaded: " + item_name + " (" + str(ammo_current) + "/" + str(max_mag_size) + ")", "BaseWeapon")
 
 ## Reset weapon for object pooling
 func reset_for_pool() -> void:
@@ -258,9 +360,19 @@ func reset_for_pool() -> void:
 	is_held = false
 	holder = null
 	
-	# Reset ammo to full if not infinite
-	if ammo_capacity > 0:
-		ammo_current = ammo_capacity
+	# Reset magazine system state
+	is_reloading = false
+	
+	# Reset ammo to full magazine
+	var max_mag_size = magazine_size if magazine_size > 0 else ammo_capacity
+	if max_mag_size > 0:
+		ammo_current = max_mag_size
+	
+	# Reset total ammo
+	if infinite_total_ammo:
+		total_ammo = -1
+	else:
+		total_ammo = ammo_capacity
 
 ## Get weapon information for UI and debugging
 func get_weapon_info() -> Dictionary:

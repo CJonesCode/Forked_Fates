@@ -120,11 +120,11 @@ func example_cleanup():
 		return
 	
 	# Remove specific indicators
-	player.remove_leadership_indicator()
-	player.remove_status_indicator("buff_speed")
+	await player.remove_leadership_indicator()
+	await player.remove_status_indicator("buff_speed")
 	
 	# Clear all indicators
-	player.clear_status_indicators()
+	await player.clear_status_indicators()
 
 # Helper functions (these would be implemented in your actual code)
 func get_some_player() -> BasePlayer:
