@@ -9,7 +9,7 @@
 - Slay the Spire-style map progression for structured gameplay
 - Mario Party-style minigames for varied experiences
 
-**Current Status**: Godot 4.4, component-based architecture, circular dependency fix via ID-based architecture with PlayerManager singleton, .tres resource configs, object pooling, universal damage system, minigame-controlled lives/victory, UI Factory+Manager pattern, Steamworks networking via GDExtension.
+**Current Status**: Godot 4.4, component-based architecture, circular dependency fix via ID-based architecture with PlayerManager singleton, .tres resource configs, object pooling, universal damage system, minigame-controlled lives/victory, UI Factory+Manager pattern, Steamworks networking via GDExtension, **complete Map System with voting**.
 
 ## Architecture Summary
 
@@ -32,12 +32,13 @@
 - **Respawn Management**: Minigame-controllable blocking system for different game modes
 - **UI Architecture**: Complete Factory + Manager pattern with 100% consistency across codebase
 - **Data Persistence**: Versioned save/load with validation, extracted data structures
+- **Map System**: Complete Slay the Spire implementation with generation, navigation, voting, persistence
+- **Object Indicator System**: Universal visual indicators for players, items, NPCs (crowns, teams, buffs, etc.)
 - **Performance Systems**: Object pooling and monitoring with optimized logging
 - **Configuration**: Lazy-loaded configs with caching, extracted global config classes
 - **Lazy Loading Architecture**: Complete implementation - minimal startup overhead, all resources on-demand
 - **Memory Management**: Proper resource cleanup on shutdown
 - **Code Quality**: Clean static analysis results
-- **Parse Errors**: Critical bugs resolved - 30+ Logger calls, 26 inner classes, autoload conflicts
 
 ## Critical File Locations
 
@@ -45,7 +46,7 @@
 ```
 autoloads/
 ├── event_bus.gd           # Global signal relay with connection management
-├── game_manager.gd        # State machine-based game coordinator
+├── game_manager.gd        # State machine-based game coordinator with map persistence
 ├── steam_manager.gd       # Steamworks integration and P2P networking
 └── [5 additional autoloads listed in project.godot]
 
@@ -55,7 +56,7 @@ Additional Autoloads:
 - PerformanceDashboard: scripts/core/performance_dashboard.gd
 - DataManager: scripts/core/data_manager.gd
 - ConfigManager: scripts/core/config_manager.gd
-- PlayerManager: scripts/core/player_manager.gd  # NEW: ID-based player lookups
+- PlayerManager: scripts/core/player_manager.gd  # ID-based player lookups
 ```
 
 ### **Core Systems**
@@ -67,8 +68,9 @@ scripts/core/
 │   ├── session_config.gd  # Session configuration
 │   ├── game_settings.gd   # User preferences/settings
 │   ├── save_data.gd       # Save game data structure
+│   ├── party_progress_data.gd # NEW: Party-wide progress with voting system
 │   └── player_statistics.gd # Player performance data
-├── collision_layers.gd    # Centralized collision management
+├── collision_layers.gd    # Centralized collision management with TRIGGERS/DESTRUCTIBLES
 ├── logger.gd              # Structured logging system
 ├── game_config.gd         # Runtime configuration values
 ├── save_system.gd         # Save/load operations (uses preload pattern)
@@ -76,18 +78,41 @@ scripts/core/
 └── [performance & monitoring systems]
 ```
 
+### **Map System (NEW - Complete Implementation)**
+```
+scripts/map/
+├── core/
+│   ├── map_data.gd            # MapData resource class with validation
+│   ├── map_node.gd            # MapNode resource class
+│   ├── map_generator.gd       # Slay the Spire-style generation algorithm
+│   └── map_generation_config.gd # Configuration for map generation
+├── navigation/
+│   ├── map_navigation.gd             # Core navigation logic with voting
+│   └── map_navigation_controller.gd  # UI bridge controller
+├── config/
+│   ├── map_visual_config.gd          # Visual styling configuration
+│   └── minigame_display_names.gd     # Node type display names
+└── visualization/
+    ├── map_renderer.gd        # Visual display with UIFactory integration
+    └── line_drawer.gd         # Connection line rendering
+
+scenes/ui/
+├── map_view.tscn         # Map UI scene structure
+└── map_view.gd          # Map coordinator with voting UI
+```
+
 ### **Player Architecture**
 ```
 scripts/player/
 ├── base_player.gd         # Component coordinator (NOT monolithic)
 └── components/            # 7 specialized components
-    ├── base_component.gd           # Abstract base with lifecycle
-    ├── movement_component.gd       # Physics, jumping, facing
-    ├── health_component.gd         # Health, damage, death
-    ├── item_component.gd           # Universal held objects (weapons, consumables, tools)
-    ├── input_component.gd          # Input processing
-    ├── ragdoll_component.gd        # Ragdoll physics
-    └── object_indicator_manager.gd # Universal object indicators (crown, team, buffs, etc.)
+    ├── base_component.gd                # Abstract base with lifecycle
+    ├── movement_component.gd            # Physics, jumping, facing
+    ├── health_component.gd              # Health, damage, death
+    ├── item_component.gd                # Universal held objects (weapons, consumables, tools)
+    ├── input_component.gd               # Input processing
+    ├── ragdoll_component.gd             # Ragdoll physics
+    └── object_indicator_manager.gd      # NEW: Universal object indicators (crown, team, buffs, etc.)
 ```
 
 ### **Weapon System (Operational)**
@@ -96,12 +121,13 @@ scripts/items/
 ├── base_item.gd           # Core item behavior with proper holder management
 ├── pistol.gd              # Ranged weapon with bullet spawning
 ├── bullet.gd              # Projectile with collision detection and pooling
-└── bat.gd                 # Melee weapon with swing mechanics
+├── bat.gd                 # Melee weapon with swing mechanics
+└── trigger_item.gd        # NEW: Environmental triggers (hazards, boosts, etc.)
 
 Key Features:
 - Object pooling for bullets and items
 - Proper signal connection management
-- Collision layer configuration
+- Collision layer configuration with TRIGGERS layer
 - Holder attachment system
 - ItemFactory integration
 ```
@@ -109,13 +135,19 @@ Key Features:
 ### **Minigame Framework (Proper Inheritance + UI Management)**
 ```
 scripts/minigames/core/
-├── base_minigame.gd           # class_name BaseMinigame - Automatic UI cleanup
-├── physics_minigame.gd        # class_name PhysicsMinigame - For physics-based games
-├── ui_minigame.gd             # class_name UIMinigame - For UI-only games  
-├── turn_based_minigame.gd     # class_name TurnBasedMinigame - For strategy games
-├── minigame_context.gd        # class_name MinigameContext - System control interface
-├── minigame_registry.gd       # class_name MinigameRegistry - Dynamic loading
-└── standard_managers/         # Optional tools with proper class_name declarations
+├── base_minigame.gd              # class_name BaseMinigame - Automatic UI cleanup
+├── physics_minigame.gd           # class_name PhysicsMinigame - For physics-based games
+├── ui_minigame.gd                # class_name UIMinigame - For UI-only games  
+├── turn_based_minigame.gd        # class_name TurnBasedMinigame - For strategy games
+├── minigame_context.gd           # class_name MinigameContext - System control interface
+├── minigame_registry.gd          # class_name MinigameRegistry - Dynamic loading
+├── minigame_result.gd            # class_name MinigameResult - Result data structure
+├── map_state_interface.gd        # NEW: Bridge to persistent overworld state
+└── standard_managers/            # Optional tools with proper class_name declarations
+    ├── player_spawner.gd         # Player spawning and management
+    ├── item_spawner.gd           # Item/weapon spawning
+    ├── respawn_manager.gd        # Respawn timing and positioning
+    └── victory_condition_manager.gd # Victory tracking and evaluation
 ```
 
 ## Key Architecture Patterns
@@ -161,7 +193,193 @@ func _ready() -> void:
     PlayerManager.register_player(player_data.player_id, self)
 ```
 
-### **3. Weapon System (Configuration-Driven + Event-Based Architecture)**
+### **3. Map System (NEW - Complete Slay the Spire Implementation)**
+
+**Map Generation**:
+```gdscript
+# MapGenerator.gd - generates 4-layer tree structure
+class_name MapGenerator
+static func generate(config: MapGenerationConfig = null) -> MapData:
+    var generator: MapGenerator = MapGenerator.new()
+    return generator._generate_with_config(config)
+
+# Layer structure: Start -> 2-5 nodes -> 2-5 nodes -> 2-5 nodes -> Boss
+# Total nodes: 10-14 per map with proper connectivity validation
+```
+
+**Map Navigation with Voting**:
+```gdscript
+# MapNavigation.gd - Slay the Spire rules + democratic voting
+class_name MapNavigation extends RefCounted
+
+func move_to_node(target_node: String) -> bool:
+    # Rule 1: Cannot move to already visited nodes (no backtracking)
+    # Rule 2: Can only move to directly connected nodes  
+    # Rule 3: Target node must be available (unlocked)
+    # Rule 4: Must complete current node before moving
+
+func start_node_voting(deadline_seconds: int = 30) -> int:
+    # Start democratic voting when multiple paths available
+    var available_moves: Array[String] = get_available_moves()
+    if available_moves.size() > 1:
+        return party_progress.add_node_voting(available_moves, deadline_seconds)
+    return -1
+
+func resolve_node_voting(decision_index: int) -> bool:
+    # Execute the democratically chosen move
+    var chosen_node: String = _get_voting_winner(decision_index)
+    return move_to_node(chosen_node)
+```
+
+**Map Persistence**:
+```gdscript
+# GameManager.gd - map state persistence across sessions
+var persistent_map_data = null  # MapData object
+var persistent_map_navigation_data: Dictionary = {}
+
+func store_map_data(map_data: MapData, navigation_data: Dictionary) -> void:
+    persistent_map_data = map_data
+    persistent_map_navigation_data = navigation_data
+
+func has_persistent_map() -> bool:
+    return persistent_map_data != null
+```
+
+**Map UI Integration**:
+```gdscript
+# MapView.gd - coordinator using new map architecture  
+func _initialize_map_system() -> void:
+    map_generator = MapGenerator.new()
+    map_renderer = MapRenderer.new()
+    map_navigation = MapNavigation.new(party_progress)
+    _initialize_or_load_map()  # Load existing or generate new
+
+func _start_movement_voting(available_moves: Array[String]) -> void:
+    # Create voting UI using UIFactory patterns
+    _create_voting_ui(available_moves)
+    _start_voting_monitor()
+```
+
+### **4. Voting System (NEW - Democratic Decision Making)**
+
+**Party Progress Data with Voting**:
+```gdscript
+# PartyProgressData.gd - democratic voting for party decisions
+class_name PartyProgressData extends Resource
+
+func add_node_voting(available_node_ids: Array[int], deadline_seconds: int = 30) -> int:
+    var options: Array[String] = []
+    for node_id in available_node_ids:
+        options.append("Node " + str(node_id))
+    add_pending_decision("node_selection", options, deadline_seconds)
+    return pending_decisions.size() - 1
+
+func vote_for_node(decision_index: int, player_id: int, node_index: int) -> bool:
+    return vote_on_decision(decision_index, player_id, node_index)
+
+func get_voting_results(decision_index: int) -> Dictionary:
+    # Count votes, find winners, handle ties
+    var results = {
+        "vote_counts": vote_counts,
+        "winning_options": winning_options,
+        "is_tie": winning_options.size() > 1
+    }
+    return results
+```
+
+**Voting UI Integration**:
+```gdscript
+# MapView.gd - voting UI using UIFactory patterns
+func _create_voting_ui(available_moves: Array[String]) -> void:
+    # Create voting panel using UIFactory
+    var panel_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
+    voting_ui_panel = UIFactory.create_ui_element(UIFactory.UIElementType.PANEL, panel_config)
+    
+    # Create voting buttons for each option
+    for i in range(available_moves.size()):
+        var button_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
+        var vote_button: Button = UIFactory.create_ui_element(UIFactory.UIElementType.BUTTON, button_config)
+        vote_button.pressed.connect(_on_vote_button_pressed.bind(node_id))
+```
+
+### **5. Object Indicator System (NEW - Universal Visual Indicators)**
+
+**Generalized from StatusIndicator to ObjectIndicator**:
+```gdscript
+# ObjectIndicatorManager.gd - works with any object, not just players
+class_name ObjectIndicatorManager extends BaseComponent
+
+func add_object_indicator(indicator_id: String, icon: String, color: Color = Color.WHITE) -> void:
+    var indicator_data: ObjectIndicatorData = ObjectIndicatorData.new()
+    indicator_data.configure(indicator_id, icon, color, false)
+    _create_and_add_indicator(indicator_data)
+
+func add_leadership_indicator(icon: String = "👑", color: Color = Color.GOLD) -> void:
+    # Crown system with proper centering and tie detection
+    add_object_indicator("leadership", icon, color)
+
+func add_team_indicator(team_color: Color) -> void:
+    # Team markers for multiplayer coordination
+    add_object_indicator("team", "●", team_color)
+
+func add_collection_indicator(collection_id: String, items: Array[ObjectIndicatorData]) -> void:
+    # Collection system with automatic priority-based sorting
+    # Perfect for debuffs, status effects, ammo displays
+```
+
+**Crown Leadership with Proper Tie Detection**:
+```gdscript
+# SuddenDeathMinigame.gd - crown logic requires performance gaps
+func _get_elimination_leader() -> Array[PlayerData]:
+    # Two-pass algorithm to find all players at top performance
+    # Primary metric: lives, Tiebreaker1: kills, Tiebreaker2: damage_dealt
+    # Returns null when players tied - crown only shows with clear performance gap
+```
+
+### **6. Enhanced Collision Layers (NEW - Expanded Physics)**
+
+**Additional Collision Layers**:
+```gdscript
+# CollisionLayers.gd - centralized collision management
+enum Layer {
+    NONE = 0,
+    ENVIRONMENT = 1,    # Static world geometry  
+    PLAYERS = 2,        # Player characters
+    ITEMS = 4,          # Pickup items
+    PROJECTILES = 8,    # Bullets, grenades
+    TRIGGERS = 16,      # NEW: Area2D triggers for events, pickups, damage zones
+    DESTRUCTIBLES = 32, # NEW: Breakable objects in the environment
+}
+
+# Setup methods for new layers
+static func setup_trigger(trigger: Area2D) -> void:
+    set_layer(trigger, Layer.TRIGGERS)
+    set_mask(trigger, Mask.PLAYER_DETECTION)
+
+static func setup_destructible(destructible: RigidBody2D) -> void:
+    set_layer(destructible, Layer.DESTRUCTIBLES)
+    set_mask(destructible, Mask.PROJECTILE_TARGETS)
+```
+
+**Trigger Item System**:
+```gdscript
+# TriggerItem.gd - environmental interactions
+class_name TriggerItem extends BaseItem
+
+@export var trigger_type: String = "speed_boost"  # "hazard", "checkpoint", "bounce_pad", "healing_zone"
+@export var effect_strength: float = 1.0
+@export var affected_teams: Array[String] = []  # Team restrictions
+
+func _activate_trigger(player: BasePlayer) -> void:
+    match trigger_type:
+        "speed_boost": _apply_speed_boost(player)
+        "hazard": _apply_hazard_damage(player) 
+        "checkpoint": _activate_checkpoint(player)
+        "bounce_pad": _apply_bounce_effect(player)
+        "healing_zone": _apply_healing(player)
+```
+
+### **7. Weapon System (Configuration-Driven + Event-Based Architecture)**
 
 **Configuration-Driven Weapon Properties**:
 ```gdscript
@@ -224,7 +442,7 @@ static func create_item(item_id: String) -> BaseItem:
     return config.item_scene.instantiate()
 ```
 
-### **4. Unified Damage System**
+### **8. Unified Damage System**
 
 All damage uses a single method with sensible defaults for any source type.
 
@@ -250,7 +468,7 @@ func _on_damage_reported(victim_id: int, attacker_id: int, damage: int, source_n
     victim_player.health.take_damage(damage, null, attacker_id, source_name)  # Preserves attribution
 ```
 
-### **5. UI Architecture (Factory + Manager Pattern)**
+### **9. UI Architecture (Factory + Manager Pattern)**
 
 **Design Philosophy**: Split UI responsibilities for clean separation of concerns
 - **UIFactory**: Creates UI elements with consistent styling and configuration
@@ -311,7 +529,7 @@ UIManager.hide_game_hud()  # Called automatically by BaseMinigame.end_minigame()
 - **Configuration-driven creation** - Use .tres files and UIElementConfig for styling
 - **No bypass routes** - UIManager only accepts UIFactory-created elements
 
-### **5. Minigame Inheritance Hierarchy (Clean Architecture + UI Management)**
+### **10. Minigame Inheritance Hierarchy (Clean Architecture + UI Management)**
 
 **Inheritance Chain** with automatic UI cleanup:
 ```gdscript
@@ -333,7 +551,7 @@ class_name SuddenDeathMinigame extends PhysicsMinigame
 # Inherits automatic UI cleanup from BaseMinigame
 ```
 
-### **6. Universal Damage System**
+### **11. Universal Damage System**
 
 All minigame types handle damage via BaseMinigame, specialized by subclass.
 
@@ -353,7 +571,7 @@ func _on_damage_reported(...) -> void:
 # Other minigame types implement differently
 ```
 
-### **5. Minigame-Controlled Lives & Victory**
+### **12. Minigame-Controlled Lives & Victory**
 
 Minigames control their own lives/respawn rules. No automatic global decrementation.
 
@@ -372,7 +590,7 @@ func _on_player_died(player_id: int) -> void:
 # Other minigames implement different rules
 ```
 
-### **7. Modern Godot 4.x Syntax Patterns**
+### **13. Modern Godot 4.x Syntax Patterns**
 ```gdscript
 # CORRECT: Super method calls (modern syntax)
 func get_item_info() -> Dictionary:
@@ -398,7 +616,7 @@ var temp_holder: BasePlayer = holder  # Preserve during _exit_tree()
 holder = temp_holder  # Restore after reparenting
 ```
 
-### **8. Factory Pattern Usage**
+### **14. Factory Pattern Usage**
 ```gdscript
 # Create players with configuration
 var player: BasePlayer = PlayerFactory.create_player("standard", player_data)
@@ -410,7 +628,7 @@ var bullet: Bullet = ItemFactory.create_item("bullet") as Bullet
 var minigame: BaseMinigame = MinigameFactory.create_minigame("sudden_death", context)
 ```
 
-### **9. Lazy Loading Architecture**
+### **15. Lazy Loading Architecture**
 ```gdscript
 # LAZY POOLING: Create pools only when first requested
 func get_item(item_id: String) -> Node:
@@ -443,7 +661,7 @@ func _ready() -> void:
     _initialize_session()  # Creates players before game mode selected
 ```
 
-### **10. Configuration System** (Lazy Loading Architecture)
+### **16. Configuration System** (Lazy Loading Architecture)
 ```gdscript
 # LAZY LOADING: Configurations loaded only when requested (minimal startup overhead)
 var config: PlayerConfig = ConfigManager.get_player_config("standard")  # Loads on first access
@@ -475,9 +693,9 @@ var move_speed: float = game_config.default_move_speed
 # item_scene = ExtResource("pistol_scene")
 ```
 
-### **11. ExtResource Best Practices** (Robust Resource References)
+### **17. ExtResource Best Practices** (Robust Resource References)
 ```gdscript
-# WRONG: Brittle numeric IDs that break when adding resources
+# WRONG: Brittle numeric IDs
 [ext_resource type="Script" path="res://configs/item_configs/item_config.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://scenes/weapons/pistol.tscn" id="2_scene"]
 [ext_resource type="Texture2D" path="res://assets/icons/pistol_icon.png" id="3_icon"]
@@ -507,370 +725,7 @@ fire_sound = ExtResource("pistol_sound")    # No renumbering cascade
 # - IDs are arbitrary - they just need to be unique within each file
 ```
 
-## Current Implementation Status
-
-### **Implemented Systems**
-1. **SuddenDeathMinigame** - Elimination-based gameplay with UI management
-2. **Player Components** - Movement, health, inventory, input, ragdoll
-3. **Weapon System** - Pistol (ranged), Bat (melee), Bullet (projectile) - Operational
-4. **UI Framework** - Menu, map view (placeholder), HUD system with automatic cleanup
-5. **Performance Optimization** - Object pooling for frequently spawned items
-6. **Data Persistence** - Save/load with versioning and validation
-
-### **Partial/Placeholder**
-1. **Map System** - UI exists, generation logic planned
-2. **AI System** - Architecture ready, no implementation
-3. **Steamworks Networking** - Lobby creation/joining implemented, player data sync pending
-
-### **Not Implemented**
-1. **Additional Minigames** - Framework supports, only sudden death exists
-2. **Assets** - Using placeholder graphics/audio
-3. **Map Generation** - Random node-based progression planned
-
-## Development Workflows
-
-### **Testing Changes with Temporary Scenes**
-1. Create temporary test scene: `scenes/temp_ui_test.tscn`
-2. Create simple test script: `scripts/temp_ui_test.gd`
-```gdscript
-extends Control
-func _ready() -> void:
-    # Test your specific changes
-    var config = UIFactory.UIElementConfig.new()
-    config.text = "Test"
-    var element = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, config)
-    print("UIFactory test: ", element != null and element is Label)
-    get_tree().quit()  # Auto-exit
-```
-3. Run test: `/Applications/Godot.app/Contents/MacOS/Godot --path . scenes/temp_ui_test.tscn --headless`
-4. Clean up: `rm scenes/temp_ui_test.tscn scripts/temp_ui_test.gd`
-
-### **Critical: Test Actual User Interaction Paths**
-**WRONG - Synthetic Testing (bypasses user flow):**
-```gdscript
-# This doesn't test the real user experience!
-var retry_handler = steam_lobby.RetryHandler.new(steam_lobby)
-if SteamManager: print("SteamManager accessible")  # Doesn't test actual lobby creation!
-```
-
-**CORRECT - Integration Testing (follows user flow):**
-```gdscript
-# Test the EXACT path users take
-func _ready() -> void:
-    var steam_lobby_scene = UIFactory.get_screen_scene("direct_connect")  # Now Steam lobby UI
-    var steam_lobby = steam_lobby_scene.instantiate()
-    add_child(steam_lobby)
-    await get_tree().process_frame
-    
-    # Actually simulate user clicking Host Game button
-    steam_lobby._on_host_button_pressed()  # Real user path!
-    # This triggers: _start_hosting() → retry_handler.attempt_operation("host") → SteamManager.create_lobby()
-    # Which would reveal any Steam initialization or lobby creation errors
-```
-
-**Key Principle:** Test the **same code path** users trigger, not simplified versions.
-- Button clicks should be simulated: `button.pressed.emit()` or `_on_button_pressed()`
-- Follow method chains: User action → handler → system calls
-- Integration testing over unit testing for UI functionality
-- Don't bypass user interaction flow with manual object creation
-- Don't test components in isolation if users experience them integrated
-
-**Real Example - Steam Lobby Host Game:**
-```
-User Experience Path:
-Click "Host Game" → _on_host_button_pressed() → _start_hosting() → 
-retry_handler.attempt_operation("host") → SteamManager.create_lobby()
-
-Test Should Follow Same Path:
-steam_lobby._on_host_button_pressed()  # Not manual RetryHandler creation!
-```
-
-### **Adding a New Minigame**
-1. Decide specialization level (Physics/UI/TurnBased)
-2. Create scene and script extending appropriate base class
-3. Register in MinigameRegistry (automatic discovery available)
-4. Create configuration in `configs/minigame_configs/`
-5. Test with MinigameFactory
-6. **UI cleanup is automatic** - no need to manually hide HUD
-
-### **Adding Player Components**
-1. Extend BaseComponent
-2. Implement lifecycle methods (_component_ready, _component_process, etc.)
-3. Add to BasePlayer scene and connect signals
-4. Update component initialization in BasePlayer
-
-### **Adding Items/Weapons**
-1. Extend BaseWeapon for combat items (inherits configuration loading)
-2. Override _apply_weapon_config() for specialized properties
-3. Create scene with proper collision layers and components
-4. **Create ItemConfig .tres file** with all weapon properties
-5. Add to PoolManager configuration if pooled
-6. **Test configuration changes** - modify .tres files to see immediate gameplay effects
-7. **Ensure proper signal management** to prevent connection conflicts
-
-### **Extending UI**
-1. **Create through UIFactory** - Use `UIFactory.create_ui_element()` for generic elements
-2. **Specialized factories** - Use `UIFactory.create_player_panel()`, `UIFactory.create_notification()`, etc.
-3. **Screen creation** - Use `UIFactory.get_screen_scene()` + `UIManager.push_screen()` for navigation
-4. **Overlay management** - Use `UIFactory.create_*()` + `UIManager.show_overlay()` for modals
-5. **Configuration-driven** - Create `.tres` files in `configs/ui_configs/` for styling
-6. **Automatic HUD cleanup** - BaseMinigame handles `UIManager.hide_game_hud()` automatically
-7. **No manual UI creation** - All `Label.new()`, `Button.new()` calls should use UIFactory
-
-## Critical Guidelines
-
-### **DO NOT**
-- Make BasePlayer monolithic again - it's a component coordinator
-- Make BaseMinigame handle everything - use specialization levels
-- Bypass the factory patterns for object creation
-- Ignore object pooling for frequently spawned items
-- Create direct dependencies between major systems
-- Skip configuration files - use ConfigManager
-- Load resources eagerly in _ready() - use lazy loading patterns
-- Pre-warm object pools - create pools only when needed
-- Initialize systems before they're selected/used
-- **Create circular dependencies** - Use ID-based architecture with PlayerManager lookups
-- **Use direct object references across system boundaries** - Use IDs and lookup when needed
-- **Create UI elements manually** - Use UIFactory for all UI creation
-- **Bypass UIManager for global UI** - Screen navigation and overlays must use UIManager
-- **Mix UI creation approaches** - UIFactory + UIManager is the only pattern
-- **Leave temporary test files** - Always clean up test scenes/scripts after validation
-- **Bypass user interaction flows in tests** - Test the exact path users take, not simplified versions
-- **Implement cleanup timing manually in individual minigames** - BaseMinigame.abort_minigame() handles this automatically
-- **Use multiple damage methods** - Use unified `take_damage()` method for all sources with proper attribution
-- **Use @onready for optional components** - Use `get_node_or_null()` and null checks for optional inheritance features
-- Use `super().method()` syntax - use `super.method()` in Godot 4.x
-- Create inner classes that are referenced before definition
-- Add conditional checks for static methods with `has_method()`
-- Use `Time.get_time_dict_from_system()["unix"]` - key doesn't exist
-- Call static methods on instances - use class name directly
-- Mix StringName and String types in ternary operators without conversion
-- Use parameter names that shadow built-in properties (position, name, etc.)
-- Reuse variable names in overlapping scopes - use descriptive names
-- Use await on non-coroutine functions
-- Name constants that conflict with global class names
-- Connect signals without checking if already connected (object pooling)
-- Clear holder references during reparenting operations
-- Add default health values to GameConfig - health is per-minigame
-- Manually add UI cleanup to specialized minigame classes
-- **Use numeric ExtResource IDs** - Use descriptive names like "pistol_scene" not "2_scene"
-
-### **DO**
-- Use strict typing throughout (`var name: String`)
-- Follow component-based architecture patterns
-- Emit signals through EventBus for global events
-- Use Logger instead of print() statements
-- Create configuration resources for new systems
-- Test with existing factory and manager systems
-- Use lazy loading - load resources only when needed
-- Initialize systems only when game modes are selected
-- Create pools on-demand, not in _ready() methods
-- **Use ID-based architecture** - `var player_id: int` + `PlayerManager.get_player(id)` for cross-system references
-- **Register players in PlayerManager** - Call `PlayerManager.register_player()` in `BasePlayer._ready()`
-- **Use pickup_by_id() for weapons** - Eliminates circular dependencies
-- **Load weapon properties from ItemConfig** - Call `_load_weapon_config()` in `_ready()`, override `_apply_weapon_config()` for specialized properties
-- **Use EventBus for weapon positioning** - Request position via `EventBus.weapon_position_requested.emit()`, respond in WeaponComponent
-- **Test .tres file changes** - Modify weapon configs and see immediate gameplay effects
-- **Use unified damage method** - `player.health.take_damage(damage, source, attacker_id, source_name)` for all damage sources
-- **Use optional component patterns** - `get_node_or_null()` with null checks for specialized inheritance
-- Use `super.method_name()` for parent method calls
-- Use Dictionary structures for complex data instead of inner classes
-- Call static methods directly without conditional checks
-- Use `Time.get_unix_time_from_system()` for Unix timestamps
-- Implement `_exit_tree()` for cleanup, signal disconnection, resource freeing
-- Use descriptive parameter names that don't conflict with built-ins
-- Convert types explicitly in ternary operators: `str(node.name) if node else "Default"`
-- Call static methods directly on classes: `DirAccess.make_dir_recursive_absolute()`
-- Use descriptive variable names in complex scopes to avoid confusion
-- Only await coroutines and signals, not immediate functions
-- Add suffixes to constants that might conflict: `PlayerConfigClass` not `PlayerConfig`
-- Check signal connections before connecting: `if not signal.is_connected(method):`
-- Preserve holder references during item attachment with temp variables
-- Use ItemConfig, PlayerConfig, MinigameConfig classes for configurations
-- Rely on BaseMinigame for automatic UI cleanup
-- Create temporary test scenes for validating changes, then delete them after testing
-- Test actual user interaction paths - Simulate button clicks and follow the same method chains users trigger
-- Use await when calling abort_minigame() - BaseMinigame handles cleanup timing automatically
-- **Use descriptive ExtResource IDs** - "pistol_scene" instead of "2_scene" for maintainability
-- **Use ObjectIndicator system** - Add visual indicators with `add_object_indicator()`, `add_leadership_indicator()`, etc.
-- **Ensure crown logic requires performance gaps** - Leadership should return null when players tied
-
-## Performance Considerations
-
-### **Lazy Loading Architecture**
-- **Minimal startup overhead**: No resources loaded during _ready()
-- **PoolManager**: Pools created only when first item requested
-- **ConfigManager**: Configs loaded only when accessed
-- **MinigameManager**: Systems initialize only when starting games
-- **GameManager**: Players created only when game mode selected
-- **Memory efficient**: Resources freed when not needed
-
-### **Object Pooling** (Lazy Initialization)
-- **PoolManager** handles bullets, items automatically with lazy pool creation
-- Call `PoolManager.get_item("bullet")` instead of instantiating
-- Implement reset() method for pooled objects
-- **Mark objects as pooled**: `bullet.is_pooled = true`
-- **Pools created on-demand**: No pre-warming, minimal startup cost
-
-### **Signal Management**
-- **Check before connecting**: Prevent duplicate signal connections
-- **Disconnect in _exit_tree()**: Proper cleanup for pooled objects
-- **EventBus** provides automatic connection cleanup
-
-### **Collision Optimization**
-- Use **CollisionLayers** enum for consistent setup
-- Avoid excessive collision checks in _physics_process
-
-## Extension Points
-
-### **Most Common Additions**
-1. **New Minigames** - Use the 3-level system control approach (UI cleanup automatic)
-2. **Player Abilities** - Add new components to player system
-3. **Items/Weapons** - Extend BaseItem with factory integration and proper pooling
-4. **UI Screens** - Use UIFactory and ScreenManager
-5. **Map Nodes** - Implement BaseMapNode when map system is built
-
-### **Advanced Extensions**
-1. **AI Behaviors** - Extend BasePlayer with AI components
-2. **Networking** - Signal-based architecture is ready
-3. **Modding Support** - Factory patterns support runtime loading
-4. **Performance Monitoring** - PerformanceDashboard extensible
-
-## System Integration Map
-
-```
-EventBus (Global Signal Hub)
-    ↕
-GameManager (State Machine) ←→ UIManager (UI Coordinator w/ HUD Lifecycle)
-    ↕                              ↕
-MinigameRegistry                HUDController & ScreenManager  
-    ↕                              ↕
-BaseMinigame Variants ←→ Player Components ←→ UIEventRouter
-    ↕                              ↕
-Standard Managers ←→ Weapon System ←→ Object Pooling
-```
-
-## Quick Reference
-
-### **Common Signal Patterns**
-```gdscript
-# Global events through EventBus
-EventBus.player_died.emit(player_id)
-EventBus.minigame_started.emit("sudden_death")
-
-# Component-level signals
-health.died.connect(_on_health_died)
-inventory.item_used.connect(_on_item_used)
-
-# Safe signal connections (pooled objects)
-if not body_shape_entered.is_connected(_on_body_shape_entered):
-    body_shape_entered.connect(_on_body_shape_entered)
-```
-
-### **Weapon System Patterns**
-```gdscript
-# Configuration-driven weapon initialization
-func _ready() -> void:
-    super()
-    _load_weapon_config()  # Load properties from .tres files
-
-func _apply_weapon_config(config: ItemConfig) -> void:
-    # Base weapon properties from ItemConfig
-    base_damage = config.damage_amount
-    fire_rate = config.fire_rate
-    ammo_capacity = config.ammo_capacity
-    throw_damage_multiplier = config.throw_damage_multiplier
-
-# Event-driven weapon positioning (no direct component access)
-func _physics_process(delta: float) -> void:
-    if is_held and holder:
-        _request_position_update()
-
-func _request_position_update() -> void:
-    var weapon_id: String = item_name
-    var holder_id: int = holder.player_data.player_id
-    EventBus.weapon_position_requested.emit(weapon_id, holder_id)
-
-# Unified damage application for all item types
-target_player.health.take_damage(damage, self, attacker_id, "Bat")
-target_player.health.take_damage(damage, self, shooter_id, "Bullet")
-target_player.health.take_damage(damage, self, thrower_id, "Thrown Pistol")
-
-# Proper bullet creation and pooling
-var bullet: Node = PoolManager.get_item("bullet")
-var bullet_obj: Bullet = bullet as Bullet
-bullet_obj.is_pooled = true
-bullet_obj.initialize(direction, position, holder_id)  # Use ID
-
-# Item attachment with holder preservation
-var temp_holder: BasePlayer = holder
-# ... reparenting operations ...
-holder = temp_holder
-is_held = true
-```
-
-### **ObjectIndicator System Patterns**
-```gdscript
-# Add indicators to any object (players, items, NPCs)
-player.add_leadership_indicator("👑", Color.GOLD)  # Crown with proper centering
-player.add_team_indicator(Color.RED)  # Team markers
-player.add_buff_indicator("speed", "⚡", Color.CYAN)  # Temporary buffs
-player.remove_object_indicator("speed_buff", true)  # Remove with animation
-```
-
-
-
-### **Logging Best Practices**
-```gdscript
-Logger.system("System initialized", "ComponentName")
-Logger.game_flow("Player spawned", "MinigameName") 
-Logger.warning("Configuration missing", "SystemName")
-Logger.error("Critical failure", "SystemName")
-```
-
-### **Configuration Access** (Lazy Loading)
-```gdscript
-# Runtime values (no default health in GameConfig)
-var config: GameConfig = GameConfig.get_instance()
-var speed: float = config.default_move_speed
-
-# LAZY LOADING: Resource configurations loaded only on first access
-var player_config: PlayerConfig = ConfigManager.get_player_config("standard")    # Loads if not cached
-var item_config: ItemConfig = ConfigManager.get_item_config("pistol")            # Loads if not cached
-var minigame_config: MinigameConfig = ConfigManager.get_minigame_config("sudden_death")  # Loads if not cached
-
-# All configs load successfully with proper scene references
-if player_config and player_config.player_scene:
-    var player: BasePlayer = player_config.player_scene.instantiate()
-
-# ConfigManager._ready() no longer pre-loads configs - minimal startup overhead
-# Configs cached after first access for performance
-```
-
-### **ExtResource Best Practices** (Robust Resource References)
-```gdscript
-# WRONG: Brittle numeric IDs
-[ext_resource type="PackedScene" path="res://scenes/weapons/pistol.tscn" id="2_scene"]
-item_scene = ExtResource("2_scene")  # Hard to read, breaks when adding resources
-
-# RIGHT: Descriptive IDs
-[ext_resource type="PackedScene" path="res://scenes/weapons/pistol.tscn" id="pistol_scene"]
-item_scene = ExtResource("pistol_scene")  # Self-documenting, extensible
-
-# Adding new resources - easy with descriptive IDs
-[ext_resource type="Script" path="res://configs/item_configs/item_config.gd" id="item_config_script"]
-[ext_resource type="PackedScene" path="res://scenes/weapons/pistol.tscn" id="pistol_scene"]
-[ext_resource type="Texture2D" path="res://assets/icons/pistol_icon.png" id="pistol_icon"]
-[ext_resource type="AudioStream" path="res://assets/sounds/pistol_fire.ogg" id="pistol_sound"]
-
-# Usage in resource files
-script = ExtResource("item_config_script")
-item_scene = ExtResource("pistol_scene")
-icon_texture = ExtResource("pistol_icon")
-fire_sound = ExtResource("pistol_sound")
-```
-
-### **Universal Damage System Patterns**
+### **18. Universal Damage System Patterns**
 ```gdscript
 # Reporting damage from ANY source (items, hazards, mechanics)
 EventBus.report_player_damage(victim_id, attacker_id, damage_amount, "Bullet")
@@ -898,7 +753,7 @@ func _on_damage_reported(victim_id: int, attacker_id: int, damage: int, source_n
 # Each minigame type only implements: Damage effect specific to their game
 ```
 
-### **Minigame-Controlled Lives System Patterns**
+### **19. Minigame-Controlled Lives System Patterns**
 ```gdscript
 # Sudden Death - 3 Lives Elimination (current implementation)
 class_name SuddenDeathMinigame extends PhysicsMinigame
@@ -960,37 +815,148 @@ EventBus.emit_player_lives_changed(player_id, new_lives) # Update UI display
 
 ## Recent Architectural Changes
 
-### **Unified Damage System - Single Method Architecture**
-**Problem**: Dual take_damage methods created architectural confusion and race conditions
-```
-take_damage(damage_amount, source, attacker_id, weapon_name)  # "Generic" method
-take_damage_from_player(damage, attacker_id, weapon_name, source)  # "Explicit" method
-```
+### **Collection Indicator System - Predictable Sizing and Organization** 
+**Problem**: ObjectIndicator system lacked organization for multiple indicators with predictable sizing requirements
+**Solution**: Added collection-based indicator management with automatic width constraints
+- **Collection API**: `add_collection_indicator()`, `remove_collection_indicator()`, `clear_collection()` with automatic priority-based sorting
+- **Width Constraint System**: `set_width_constraints(max_width, enable_scaling, keep_aspect_ratio)` for predictable sizing
+- **Automatic Scaling**: Real-time scaling to fit within constraints, maintains aspect ratio or horizontal-only compression
+- **Priority-Based Sorting**: Items automatically sorted by priority within collections
+- **Perfect Use Cases**: Status effects, ammo displays, team indicators, buff/debuff collections
+- **Real-Time Updates**: Scaling recalculation on add/remove/sort operations
 
-**Solution**: Single unified method with sensible defaults for all damage sources
-- **Eliminated dual methods** - One `take_damage()` method for all sources
-- **Universal attribution** - Always tracks attacker with defaults for environmental damage
-- **Source-agnostic naming** - "source_name" instead of "weapon_name" (supports poison, crates, etc.)
-- **Fixed PhysicsMinigame bug** - No more attribution-stripping calls
-- **Consistent API** - All damage calls preserve kill tracking information
-
-**Result**: **Reliable kill attribution** - bats, bullets, thrown objects all credit kills properly + cleaner architecture
-
-### **Optional Component Pattern - Graceful Inheritance**
-**Problem**: `@onready` declarations required nodes to exist, breaking specialized subclasses
-```
-@onready var pickup_area: Area2D = $PickupArea  # Crashed when bullets inherited from BaseItem
+**Usage Example**:
+```gdscript
+# Set up ammo collection with width constraint (half pistol width)
+weapon.object_indicators.set_width_constraints(weapon.size.x / 2, true, true)
+weapon.object_indicators.add_collection_indicator("ammo", "bullet_1", bullet_data, 10.0)
+weapon.object_indicators.add_collection_indicator("ammo", "bullet_2", bullet_data, 9.0)
+# Automatically scales to fit within constraint, sorted by priority
 ```
 
-**Solution**: Optional component pattern with graceful degradation
-- **Dynamic detection** - `get_node_or_null()` instead of `@onready` for optional features
-- **Null-safe usage** - Check existence before use with `if pickup_area:`
-- **Automatic degradation** - Missing components disable features instead of crashing
-- **Flexible inheritance** - Subclasses choose which base features to include in scene structure
+**Result**: **Production-ready indicator collections** - perfect for any UI requiring predictable sizing and automatic organization
 
-**Result**: **Flexible base classes** - bullets inherit BaseItem without pickup areas, other items get full pickup functionality automatically
+### **Enhanced Ragdoll Physics - Mario Party-Style Dramatic Chaos**
+**Problem**: Ragdoll physics were too subtle and didn't create enough dramatic moments
+**Solution**: Dramatically enhanced ragdoll forces across all systems for Mario Party-style chaos
+- **Head Collision Ragdolls**: `enter_head_collision_ragdoll()` with Vector2(0, -200) base force + random chaos up to 150 horizontal and 100 vertical
+- **Enhanced Force Multipliers**: Head collisions apply 2.4x more force than regular ragdolls (344 vs 144 magnitude)
+- **Doubled Base Forces**: All ragdoll systems doubled - base tipping force to -120, movement-based forces to 60, impact forces to 100
+- **Random Chaos Addition**: All ragdolls get random horizontal/vertical chaos for unpredictability
+- **No Velocity Requirement**: Head collisions trigger ragdolls regardless of speed (Mario Party-style)
+- **Impact Direction Calculation**: Uses player positions and velocity for realistic physics
+- **Multiple Force Points**: Apply forces at different offsets for enhanced spinning
 
-### **ObjectIndicator System Generalization - Universal Visual Indicators**
+**Head Collision Trigger**:
+```gdscript
+# MovementComponent._check_immediate_head_collision() - no velocity requirement
+func _check_immediate_head_collision(other_player: BasePlayer) -> void:
+    # Head collisions always trigger ragdolls regardless of velocity for Mario Party-style chaos
+    _trigger_head_collision(other_player)
+```
+
+**Result**: **Dramatically more exciting ragdoll physics** - creates Mario Party-style chaos moments while maintaining proper collision detection and sync
+
+### **Enhanced Item Throwing Physics - Momentum-Based Weaponization**
+**Problem**: Item throwing was binary and didn't reflect player momentum or create interesting physics interactions
+**Solution**: Comprehensive momentum-based throwing system with enhanced physics and attribution
+- **Momentum Calculation**: `_calculate_throw_force_from_momentum()` based on player velocity and input
+- **Force-Based Weaponization**: >200.0 force = projectile mode with damage, <200.0 force = gentle drop
+- **Enhanced Item Physics**: Reduced damping (linear_damp=0.2, angular_damp=0.5) and low-friction materials (friction=0.3, bounce=0.1)
+- **Weaponized Throw Physics**: Extremely low damping (0.05 linear, 0.1 angular) and projectile materials (friction=0.1, bounce=0.3)
+- **Attribution Preservation**: Store attacker info BEFORE damage operations to prevent holder clearing issues
+- **Enhanced Collision**: Proper kill attribution for bat hits and weapon throws
+- **Physics State Management**: Proper restoration for gentle drops and projectile→normal transitions
+
+**Momentum Force Calculation**:
+```gdscript
+func _calculate_throw_force_from_momentum() -> float:
+    var current_velocity = velocity.length()
+    var movement_input = movement.input_vector if movement else Vector2.ZERO
+    
+    if current_velocity < 50.0 and movement_input.length() < 0.1:
+        return 50.0  # Standing still = gentle drop
+    else:
+        # Moving = throw with momentum-based force (50-500 range)
+        var momentum_factor = max(velocity_factor, input_factor * 0.8)
+        return 50.0 + (momentum_factor * 450.0)
+```
+
+**Enhanced Physics Materials**:
+```gdscript
+# BaseItem physics - 5x less linear damping, 2x less angular damping, 3x less friction
+# BaseWeapon projectile physics - 10x less damping for dramatic throwing
+```
+
+**Result**: **Dramatically improved throwing physics** - items slide naturally, weapons have projectile-quality throws, proper kill attribution maintained
+
+### **Player Capsule Collision and Visuals - Better Physics Foundation**
+**Problem**: Rectangular collision and visuals caused awkward movement and collision behavior
+**Solution**: Complete conversion to capsule-based collision and visual system
+- **Collision Update**: Changed from RectangleShape2D to CapsuleShape2D (radius=10.0, height=40.0)
+- **Visual Structure**: Node2D containing CapsuleBody (20x20 rectangle), TopCap (14x7 narrower cap), BottomCap (14x7 narrower cap)
+- **Improved Physics**: Smoother movement, natural collision behavior, better wall sliding
+- **Visual-Collision Consistency**: Visual appearance matches collision shape
+- **Color System Update**: PlayerSpawner updated to handle capsule component coloring
+- **Component Compatibility**: All systems work with capsule structure (ragdoll, indicators, etc.)
+
+**Scene Structure Update**:
+```gdscript
+# scenes/player/base_player.tscn
+[node name="PlayerSprite" type="Node2D" parent="Sprite2D"]
+[node name="CapsuleBody" type="ColorRect" parent="Sprite2D/PlayerSprite"]  # 20x20 main body
+[node name="TopCap" type="ColorRect" parent="Sprite2D/PlayerSprite"]       # 14x7 top cap  
+[node name="BottomCap" type="ColorRect" parent="Sprite2D/PlayerSprite"]    # 14x7 bottom cap
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_1"]
+radius = 10.0
+height = 40.0
+```
+
+**Result**: **Superior player physics and visuals** - players both look and behave like capsules, smoother movement, better collision behavior
+
+### **Enhanced Head Collision Detection - Mario Party Chaos**
+**Problem**: Head collision detection required minimum velocity, preventing ragdolls when players landed on each other while stationary
+**Solution**: Removed velocity requirement for instant Mario Party-style chaos
+- **No Velocity Requirement**: `_check_immediate_head_collision()` removed minimum_impact_velocity requirement entirely
+- **Immediate Trigger**: Head collisions trigger ragdolls regardless of speed or movement state
+- **Perfect for Respawn Scenarios**: Players landing on top of each other while stationary successfully trigger ragdolls
+- **Collision Area Positioning**: CircleShape2D (radius=5.0) positioned at Vector2(0, -19.5) to extend above player model
+- **Instant Detection**: Collision triggers immediately when entering head area
+- **Impact Direction Calculation**: Proper physics direction calculation for realistic dramatic effects
+
+**Head Area Setup**:
+```gdscript
+# MovementComponent._create_head_collision_area()
+var head_shape = CircleShape2D.new()
+head_shape.radius = 5.0  # Half character width
+head_collision.position = Vector2(0, -19.5)  # Extends above TopCap
+CollisionLayers.set_mask(head_area, CollisionLayers.Mask.PLAYER_DETECTION)
+```
+
+**No Velocity Check**:
+```gdscript
+func _check_immediate_head_collision(other_player: BasePlayer) -> void:
+    # Head collisions always trigger ragdolls regardless of velocity for Mario Party-style chaos
+    # This ensures players ragdoll when landing on each other, even when standing still
+    _trigger_head_collision(other_player)
+```
+
+**Result**: **Mario Party-style head collision chaos** - any contact between players causes dramatic ragdolls, perfect for respawn scenarios and stationary interactions
+
+### **Complete Map System Implementation - Slay the Spire Foundation**
+**Problem**: Placeholder map system with no actual functionality
+**Solution**: Complete implementation with generation, navigation, voting, and persistence
+- **Map Generation**: 4-layer tree structure (10-14 nodes) with proper connectivity validation
+- **Slay the Spire Navigation**: Connection-based movement, no backtracking, progressive unlocking  
+- **Democratic Voting**: PartyProgressData integration for multiple path decisions
+- **Map Persistence**: GameManager stores map data across sessions
+- **UI Integration**: MapView coordinates all systems with UIFactory patterns
+- **Testing Framework**: Comprehensive tests for generation and navigation
+
+**Result**: **Complete Slay the Spire-style map progression** - players make strategic decisions about paths, vote democratically on choices, maintain progress across sessions
+
+### **Object Indicator System Generalization - Universal Visual Indicators**
 **Problem**: StatusIndicator system was player-specific and had crown alignment issues
 ```
 PlayerStatusIndicator system - only worked for players
@@ -1013,6 +979,50 @@ Crown emoji not properly centered above player's head
 - **Crown only appears** when there's actual performance difference, never at round start
 
 **Result**: **Universal indicator system** - works for players, items, NPCs, any object + properly centered crowns + correct tie handling
+
+### **Enhanced Collision System - Environmental Interactions**
+**Problem**: Limited collision layers prevented environmental interactions
+**Solution**: Added TRIGGERS and DESTRUCTIBLES layers with supporting systems
+- **TRIGGERS Layer**: Area2D triggers for environmental interactions (speed boosts, hazards, checkpoints)
+- **DESTRUCTIBLES Layer**: Breakable objects that projectiles can damage
+- **TriggerItem System**: Environmental triggers with team restrictions and effect types
+- **CollisionLayers Enhancement**: New setup methods for environmental objects
+- **Integration**: Proper collision mask combinations for complex interactions
+
+**Result**: **Rich environmental interactions** - speed zones, hazards, destructible cover, team-specific triggers
+
+### **Voting System Implementation - Democratic Gameplay**
+**Problem**: No mechanism for multiplayer decision making
+**Solution**: PartyProgressData-based voting system with UI integration
+- **Party-Wide Decisions**: Democratic voting for map path selection
+- **Voting Session Management**: Timeout handling, vote tracking, result calculation
+- **UI Integration**: MapView creates voting interfaces using UIFactory patterns
+- **Tie Breaking**: Random selection with clear voting results display
+- **Vote Validation**: Player eligibility, duplicate prevention, timeout protection
+
+**Result**: **Democratic multiplayer decisions** - players vote on map paths, fair resolution of choices, prevents conflicts
+
+### **Map State Persistence - Session Continuity**
+**Problem**: Maps regenerated every time, losing player progress
+**Solution**: GameManager-based map data persistence across sessions
+- **Persistent Storage**: GameManager stores MapData and navigation state
+- **Session Continuity**: Maps persist across minigame sessions
+- **State Restoration**: Navigation resumes from exact previous state
+- **Progress Tracking**: Visited nodes, available moves, current position maintained
+- **Lazy Loading**: Maps only generated when no persistent data exists
+
+**Result**: **Persistent map progression** - players maintain map progress across sessions, strategic decisions have lasting impact
+
+### **Enhanced Leadership Tracking - Performance-Based Crowns**
+**Problem**: Crown leadership logic was flawed with incorrect tie detection
+**Solution**: Sophisticated leadership algorithm with proper performance evaluation
+- **Multi-Metric Evaluation**: Primary (lives), secondary (kills), tertiary (damage) metrics
+- **Proper Tie Detection**: Two-pass algorithm finds all players at top performance
+- **Performance Gap Requirement**: Crown only appears when there's clear leader
+- **Real Kill Tracking**: Actual score integration instead of hardcoded values
+- **Crown Persistence**: Leadership maintains during tied states appropriately
+
+**Result**: **Accurate performance-based leadership** - crown correctly identifies and displays current leader, handles ties properly
 
 ## Previous Architectural Changes
 
@@ -1139,6 +1149,10 @@ await some_minigame.abort_minigame()  # Cleanup timing handled automatically
 - **Player spawning** - fixed component name resolution
 - **Memory management** - proper resource cleanup on shutdown
 - **Code quality** - clean static analysis results
+- **Map system complete** - generation, navigation, voting, persistence functional
+- **Object indicators generalized** - universal system for any object type
+- **Collision system enhanced** - environmental interactions with TRIGGERS/DESTRUCTIBLES
+- **Voting system implemented** - democratic decision making for multiplayer
 
 ## For AI Agents: Development Guidelines
 
@@ -1152,7 +1166,28 @@ When adding functionality, ask:
 
 Find the right abstraction level. Design for universal base functionality with specialized implementations.
 
-### **2. Minigame Lives & Victory Control**
+### **2. Map System Development**
+```gdscript
+# Map generation with configuration
+var config: MapGenerationConfig = ConfigManager.get_map_generation_config("default_generation")
+var map_data: MapData = MapGenerator.generate(config)
+
+# Navigation with democratic voting
+var navigation: MapNavigation = MapNavigation.new(party_progress)
+navigation.initialize_map(map_data, "start")
+
+# Handle multiple path decisions
+var available_moves: Array[String] = navigation.get_available_moves()
+if available_moves.size() > 1:
+    var decision_index: int = navigation.start_node_voting(30)
+    # UI creates voting interface, players vote, then resolve
+    var success: bool = navigation.resolve_node_voting(decision_index)
+
+# Map persistence across sessions
+GameManager.store_map_data(map_data, navigation_data)
+```
+
+### **3. Minigame Lives & Victory Control**
 
 Minigames control their own rules. No automatic behavior.
 
@@ -1171,7 +1206,28 @@ func _on_my_minigame_player_died(player_id: int) -> void:
     pass
 ```
 
-### **3. Weapon System Development**
+### **4. Object Indicator Development**
+```gdscript
+# Universal system - works with any object
+func add_leadership_indicator_to_player(player: BasePlayer) -> void:
+    player.object_indicators.add_leadership_indicator("👑", Color.GOLD)
+
+func add_status_effect_to_item(item: BaseItem, effect_name: String) -> void:
+    item.object_indicators.add_buff_indicator(effect_name, "⚡", Color.CYAN)
+
+# Collection system for predictable sizing
+func setup_ammo_display(weapon: BaseWeapon) -> void:
+    var ammo_indicators: Array[ObjectIndicatorData] = []
+    for i in range(weapon.ammo_capacity):
+        var indicator: ObjectIndicatorData = ObjectIndicatorData.new()
+        indicator.configure("ammo_" + str(i), "●", Color.GREEN)
+        ammo_indicators.append(indicator)
+    
+    weapon.object_indicators.add_collection_indicator("ammo", ammo_indicators)
+    weapon.object_indicators.set_width_constraints(weapon.size.x / 2, true, true)
+```
+
+### **5. Weapon System Development**
 ```gdscript
 # Proper bullet pooling with state management
 func _shoot() -> bool:
@@ -1202,7 +1258,51 @@ func _attach_to_player(player: BasePlayer) -> void:
     is_held = temp_is_held
 ```
 
-### **4. UI Architecture Best Practices**
+### **6. Collision System Development**
+```gdscript
+# Use CollisionLayers enum for all setup
+CollisionLayers.setup_player(player)
+CollisionLayers.setup_trigger(speed_boost_area)
+CollisionLayers.setup_destructible(breakable_crate)
+
+# Environmental trigger creation
+var trigger: TriggerItem = TriggerItem.new()
+trigger.trigger_type = "hazard"
+trigger.effect_strength = 2.0
+trigger.affected_teams = ["red"]  # Only affects red team
+CollisionLayers.setup_trigger(trigger)
+
+# Check collision capabilities  
+if CollisionLayers.can_collide_with(projectile, CollisionLayers.Layer.DESTRUCTIBLES):
+    # Handle destructible collision
+```
+
+### **7. Voting System Development**
+```gdscript
+# Start democratic voting
+func start_path_voting(available_paths: Array[String]) -> int:
+    var node_ids: Array[int] = []
+    for path in available_paths:
+        node_ids.append(_convert_path_to_id(path))
+    
+    return party_progress.add_node_voting(node_ids, 30)  # 30 second deadline
+
+# Handle player votes
+func on_player_vote(decision_index: int, player_id: int, choice_index: int) -> void:
+    var success: bool = party_progress.vote_for_node(decision_index, player_id, choice_index)
+    if success:
+        _update_voting_ui()
+
+# Check completion and resolve
+func check_voting_completion(decision_index: int) -> void:
+    if party_progress.is_voting_complete(decision_index):
+        var winner: int = party_progress.resolve_voting(decision_index)
+        var chosen_path: String = available_paths[winner]
+        _execute_chosen_path(chosen_path)
+        party_progress.remove_decision(decision_index)
+```
+
+### **8. UI Architecture Best Practices**
 ```gdscript
 # ALWAYS use UIFactory + UIManager pattern - no exceptions
 func _on_multiplayer_button_pressed() -> void:
@@ -1234,7 +1334,7 @@ func _on_physics_initialize() -> void:
     # UIManager.hide_game_hud() called automatically by BaseMinigame.end_minigame()
 ```
 
-### **5. Object Pooling Best Practices**
+### **9. Object Pooling Best Practices**
 ```gdscript
 # Pool object state management
 func activate_from_pool() -> void:
@@ -1256,7 +1356,7 @@ func reset_for_pool() -> void:
     # DON'T reconnect here - let activate_from_pool() handle it
 ```
 
-### **6. Component System Patterns** 
+### **10. Component System Patterns** 
 ```gdscript
 # Use correct component names (InputComponent not InputController)
 var input_component: InputComponent = player.get_component(InputComponent)
@@ -1268,7 +1368,238 @@ func _initialize_component() -> void:
     current_health = max_health  # Use export value, not game_config default
 ```
 
-### **7. Modern Syntax Reminders**
+### **11. Modern Syntax Reminders**
+```gdscript
+# Super calls - correct Godot 4.x syntax
+func custom_method() -> Dictionary:
+    var base_data = super.get_data()  # Not super().get_data()
+    return base_data
+
+# Time API - correct usage
+var timestamp = Time.get_unix_time_from_system()  # Not ["unix"]
+
+# Signal safety in pooled objects
+if not signal_name.is_connected(callback_method):
+    signal_name.connect(callback_method)
+```
+
+### **11. Collection Indicator Development**
+```gdscript
+# Set up predictable sizing for indicator collections
+func setup_ammo_display(weapon: BaseWeapon) -> void:
+    # Set width constraint to half weapon width with aspect ratio maintained
+    weapon.object_indicators.set_width_constraints(weapon.size.x / 2, true, true)
+    
+    # Add bullets to collection with priority-based sorting
+    for i in range(weapon.ammo_capacity):
+        var bullet_data: ObjectIndicatorData = ObjectIndicatorData.new()
+        bullet_data.configure("bullet_" + str(i), "●", Color.GREEN)
+        weapon.object_indicators.add_collection_indicator("ammo", "bullet_" + str(i), bullet_data, float(i))
+
+# Status effect collections with automatic organization
+func add_status_effects(player: BasePlayer, effects: Array[Dictionary]) -> void:
+    for effect in effects:
+        var effect_data: ObjectIndicatorData = ObjectIndicatorData.create_buff_indicator(effect.icon, effect.color)
+        player.object_indicators.add_collection_indicator("buffs", effect.id, effect_data, effect.priority)
+    
+    # Real-time scaling applied automatically on each addition
+```
+
+### **12. Enhanced Ragdoll Development**
+```gdscript
+# Trigger dramatic ragdolls for Mario Party-style chaos
+func apply_dramatic_ragdoll(player: BasePlayer, impact_direction: Vector2 = Vector2.ZERO) -> void:
+    var ragdoll_component: RagdollComponent = player.get_component(RagdollComponent)
+    if ragdoll_component:
+        # Head collision ragdolls are 2.4x more dramatic than regular ragdolls
+        ragdoll_component.enter_head_collision_ragdoll(impact_direction)
+
+# Enhanced force application with multiple impact points
+func apply_enhanced_ragdoll_force(ragdoll_body: RigidBody2D) -> void:
+    # Doubled base tipping force for more dramatic effect
+    var base_tipping_force: Vector2 = Vector2(0, -120)  # 2x stronger than original
+    var random_chaos: Vector2 = Vector2(randf_range(-30.0, 30.0), randf_range(10.0, 30.0))
+    
+    # Apply forces at different points for enhanced spinning
+    ragdoll_body.apply_impulse(base_tipping_force + random_chaos, Vector2(0, -20))  # Top offset
+    ragdoll_body.apply_impulse(Vector2(randf_range(-75.0, 75.0), 0), Vector2(15, 0))  # Side spin
+
+# No velocity requirement for head collisions - instant chaos
+func check_head_collision(other_player: BasePlayer) -> void:
+    # Always trigger regardless of speed for Mario Party-style chaos
+    if other_player.current_state == BasePlayer.PlayerState.ALIVE:
+        _trigger_head_collision(other_player)
+```
+
+### **13. Momentum-Based Throwing Development**
+```gdscript
+# Calculate throw force from player momentum for natural physics
+func calculate_throw_force(player: BasePlayer) -> float:
+    var velocity_magnitude = player.velocity.length()
+    var input_magnitude = player.movement.input_vector.length() if player.movement else 0.0
+    
+    # Standing still = gentle drop (50.0), moving = weaponized throw (up to 500.0)
+    if velocity_magnitude < 50.0 and input_magnitude < 0.1:
+        return 50.0  # Gentle drop
+    else:
+        var velocity_factor = min(velocity_magnitude / 300.0, 1.0)
+        var input_factor = min(input_magnitude, 1.0)
+        var momentum_factor = max(velocity_factor, input_factor * 0.8)
+        return 50.0 + (momentum_factor * 450.0)
+
+# Force-based weaponization with enhanced physics
+func throw_item_with_physics(item: BaseItem, direction: Vector2, force: float, thrower_id: int) -> bool:
+    if force > 200.0:
+        # Weaponized throw - projectile mode with enhanced physics
+        item.linear_damp = 0.05  # 10x less damping for projectile flight
+        item.angular_damp = 0.1
+        var projectile_material = PhysicsMaterial.new()
+        projectile_material.friction = 0.1  # 3x less friction
+        projectile_material.bounce = 0.3
+        item.physics_material_override = projectile_material
+        item.is_thrown_projectile = true
+        item.thrown_by_id = thrower_id
+    else:
+        # Gentle drop - normal item physics
+        item.linear_damp = 0.2  # 5x less than Godot default
+        item.angular_damp = 0.5  # 2x less than Godot default
+    
+    item.linear_velocity = direction.normalized() * force
+    return true
+
+# Attribution preservation for proper kill tracking
+func apply_weapon_damage_with_attribution(weapon: BaseWeapon, target: BasePlayer) -> void:
+    # Store attacker info BEFORE damage operations to prevent clearing
+    var attacker_id: int = weapon.thrown_by_id if weapon.is_thrown_projectile else weapon.holder_id
+    var source_name: String = "Thrown " + weapon.item_name if weapon.is_thrown_projectile else weapon.item_name
+    
+    target.health.take_damage(weapon.throw_damage, weapon, attacker_id, source_name)
+```
+
+### **14. Capsule Collision Development**
+```gdscript
+# Setup capsule collision for better physics
+func setup_capsule_player(player: BasePlayer) -> void:
+    var capsule_shape = CapsuleShape2D.new()
+    capsule_shape.radius = 10.0
+    capsule_shape.height = 40.0
+    player.collision_shape.shape = capsule_shape
+    
+    # Benefits: smoother movement, natural collision behavior, better wall sliding
+    CollisionLayers.setup_player(player)
+
+# Create capsule visual structure matching collision
+func create_capsule_visuals(player_sprite: Node2D, color: Color) -> void:
+    # Main body (20x20 rectangle)
+    var capsule_body = ColorRect.new()
+    capsule_body.name = "CapsuleBody"
+    capsule_body.size = Vector2(20, 20)
+    capsule_body.position = Vector2(-10, -10)
+    capsule_body.color = color
+    player_sprite.add_child(capsule_body)
+    
+    # Top cap (14x7 narrower)
+    var top_cap = ColorRect.new()
+    top_cap.name = "TopCap"
+    top_cap.size = Vector2(14, 7)
+    top_cap.position = Vector2(-7, -17)
+    top_cap.color = color
+    player_sprite.add_child(top_cap)
+    
+    # Bottom cap (14x7 narrower)
+    var bottom_cap = ColorRect.new()
+    bottom_cap.name = "BottomCap"
+    bottom_cap.size = Vector2(14, 7)
+    bottom_cap.position = Vector2(-7, 10)
+    bottom_cap.color = color
+    player_sprite.add_child(bottom_cap)
+
+# Color all capsule components
+func apply_capsule_color(player_sprite: Node2D, color: Color) -> void:
+    for child in player_sprite.get_children():
+        if child is ColorRect:
+            child.color = color
+```
+
+### **15. Head Collision Detection Development**
+```gdscript
+# Setup head collision area for Mario Party-style chaos
+func setup_head_collision(player: BasePlayer) -> void:
+    var head_area = Area2D.new()
+    head_area.name = "HeadCollisionArea"
+    player.add_child(head_area)
+    
+    var head_collision = CollisionShape2D.new()
+    var head_shape = CircleShape2D.new()
+    head_shape.radius = 5.0  # Half character width
+    head_collision.shape = head_shape
+    head_collision.position = Vector2(0, -19.5)  # Extends above TopCap
+    head_area.add_child(head_collision)
+    
+    # Setup collision layers for player detection only
+    CollisionLayers.set_layer(head_area, CollisionLayers.Layer.NONE)
+    CollisionLayers.set_mask(head_area, CollisionLayers.Mask.PLAYER_DETECTION)
+    
+    head_area.body_entered.connect(_on_head_area_entered)
+
+# Instant head collision trigger - no velocity checks
+func _on_head_area_entered(body: Node2D) -> void:
+    if body is BasePlayer and body != player:
+        var other_player: BasePlayer = body as BasePlayer
+        # Instant trigger regardless of velocity for Mario Party chaos
+        if other_player.current_state == BasePlayer.PlayerState.ALIVE:
+            trigger_head_collision(other_player)
+
+# Calculate impact direction for realistic dramatic physics
+func trigger_head_collision(other_player: BasePlayer) -> void:
+    var impact_direction: Vector2 = player.global_position - other_player.global_position
+    impact_direction = impact_direction.normalized()
+    
+    # Add velocity considerations for more dynamic impacts
+    var relative_velocity: Vector2 = other_player.velocity - player.velocity
+    if relative_velocity.length() > 50.0:
+        impact_direction += relative_velocity.normalized() * 0.5
+    
+    var ragdoll_component: RagdollComponent = player.get_component(RagdollComponent)
+    if ragdoll_component:
+        ragdoll_component.enter_head_collision_ragdoll(impact_direction)
+```
+
+### **16. Object Pooling Best Practices**
+```gdscript
+# Pool object state management
+func activate_from_pool() -> void:
+    is_pooled = true  # Mark as active pooled object
+    
+    # Check signals before connecting
+    if not body_shape_entered.is_connected(_on_body_shape_entered):
+        body_shape_entered.connect(_on_body_shape_entered)
+
+func reset_for_pool() -> void:
+    # Reset state but let activation handle signal reconnection
+    shooter = null
+    velocity_vector = Vector2.ZERO
+    
+    # Disconnect signals to prevent conflicts
+    if body_shape_entered.is_connected(_on_body_shape_entered):
+        body_shape_entered.disconnect(_on_body_shape_entered)
+    
+    # DON'T reconnect here - let activate_from_pool() handle it
+```
+
+### **17. Component System Patterns** 
+```gdscript
+# Use correct component names (InputComponent not InputController)
+var input_component: InputComponent = player.get_component(InputComponent)
+if input_component and input_component.has_method("setup_for_player"):
+    input_component.setup_for_player(player_id)
+
+# Health management per-minigame (not global defaults)
+func _initialize_component() -> void:
+    current_health = max_health  # Use export value, not game_config default
+```
+
+### **18. Modern Syntax Reminders**
 ```gdscript
 # Super calls - correct Godot 4.x syntax
 func custom_method() -> Dictionary:
@@ -1285,7 +1616,7 @@ if not signal_name.is_connected(callback_method):
 
 ## Quick Start
 
-1. **Understand the current state**: Critical bugs have been fixed with architectural solutions including operational weapon system
+1. **Understand the current state**: Critical bugs have been fixed with architectural solutions including operational weapon system and complete map system
 2. **Follow component architecture**: Don't make systems monolithic  
 3. **Use proper inheritance**: Minigames use clean class_name hierarchy with automatic UI cleanup
 4. **Apply critical thinking pattern**: Question assumptions, find the right abstraction level for new systems
@@ -1304,7 +1635,11 @@ if not signal_name.is_connected(callback_method):
 17. **Know the lazy loading**: Pools, configs, sessions initialize only when needed
 18. **Know the damage system**: Universal base handling with minigame-specific implementations
 19. **Know the lives system**: Minigame-controlled lives, respawn blocking, victory conditions
-20. **Know the syntax patterns**: 
+20. **Know the map system**: Complete Slay the Spire implementation with generation, navigation, voting, persistence
+21. **Know the object indicators**: Universal visual system for players, items, NPCs with collections and constraints
+22. **Know the voting system**: Democratic decision making with PartyProgressData, timeout handling, tie resolution
+23. **Know the collision system**: Enhanced layers for environmental interactions (TRIGGERS, DESTRUCTIBLES)
+24. **Know the syntax patterns**: 
    - `super.method_name()` for parent calls
    - Dictionary for complex data structures
    - Direct static method calls: `ClassName.static_method()`
@@ -1316,14 +1651,26 @@ if not signal_name.is_connected(callback_method):
    - **Player registration**: `PlayerManager.register_player(player_data.player_id, self)` in `BasePlayer._ready()`
    - Unified damage: `player.health.take_damage(damage, source, attacker_id, source_name)` for all sources
    - UI creation: `UIFactory.create_*()` → `UIManager.show_*()` for all UI elements
+   - **Map navigation**: `MapNavigation.move_to_node()` with validation and voting support
+   - **Object indicators**: `object_indicators.add_leadership_indicator()` for universal visual feedback
+   - **Collection indicators**: `object_indicators.add_collection_indicator(collection_id, item_id, data, priority)` with automatic scaling
+   - **Width constraints**: `object_indicators.set_width_constraints(max_width, enable_scaling, keep_aspect_ratio)` for predictable sizing
+   - **Voting integration**: `party_progress.add_node_voting()` for democratic decisions
+   - **Collision setup**: `CollisionLayers.setup_trigger()` for environmental interactions
+   - **Momentum throwing**: `_calculate_throw_force_from_momentum()` for physics-based throws
+   - **Force weaponization**: `force > 200.0 = projectile mode, force < 200.0 = gentle drop`
+   - **Capsule collision**: `CapsuleShape2D(radius=10.0, height=40.0)` for better player physics
+   - **Head collision**: `_check_immediate_head_collision()` with no velocity requirement for Mario Party chaos
+   - **Enhanced ragdolls**: `enter_head_collision_ragdoll()` with 2.4x dramatic forces
+   - **Attribution preservation**: Store `attacker_id` BEFORE damage operations to prevent clearing
    - `Time.get_unix_time_from_system()` for timestamps
    - `_exit_tree()` for cleanup, signal disconnection, resource freeing
    - Type conversion in ternary: `str(node.name) if node else "Default"`
-21. **Reference this document**: All critical information is here
+25. **Reference this document**: All critical information is here
 
 ## Summary
 
-Architecture is stable. Use established patterns: components, factories, configs, ID-based references, lazy loading, object pooling. Follow existing conventions.
+Architecture is stable with major new systems implemented. Use established patterns: components, factories, configs, ID-based references, lazy loading, object pooling, **map generation/navigation**, **democratic voting**, **universal object indicators**, **enhanced collision layers**. Follow existing conventions and leverage the complete map system for Slay the Spire-style progression.
 
 ### **Testing Commands**
 
@@ -1350,6 +1697,9 @@ Architecture is stable. Use established patterns: components, factories, configs
 # Test UI system (~1.2s, validates menu and UI systems)
 /Applications/Godot.app/Contents/MacOS/Godot --headless --quit-after 3 scenes/ui/main_menu.tscn
 
+# Test map system (~1.2s, validates map generation and navigation)  
+/Applications/Godot.app/Contents/MacOS/Godot --headless --quit-after 3 scenes/ui/map_view.tscn
+
 # Benefits:
 # - 4x faster than default scene loading (~1.2s vs 5s)
 # - Tests specific game systems and components
@@ -1360,22 +1710,25 @@ Architecture is stable. Use established patterns: components, factories, configs
 #### **Create Temporary Test Scene Pattern**
 ```bash
 # 1. Create a temporary test scene to validate your changes
-# Example: testing UIFactory changes
-# File: scenes/temp_test.tscn (or any temporary name)
+# Example: testing map generation
+# File: scenes/temp_map_test.tscn (or any temporary name)
 
 # 2. Create a simple script that tests your specific changes:
 # extends Control
 # func _ready():
-#     # Test your specific changes here
-#     var test_element = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, config)
-#     print("Test passed: ", test_element != null)
+#     # Test map generation
+#     var map_data: MapData = MapGenerator.generate()
+#     print("Map generated: ", map_data.get_total_nodes(), " nodes")
+#     var navigation: MapNavigation = MapNavigation.new(PartyProgressData.new())
+#     navigation.initialize_map(map_data, "start")
+#     print("Navigation initialized at: ", navigation.current_node_id)
 #     get_tree().quit()  # Auto-exit after test
 
 # 3. Run the test scene directly (ALWAYS include --quit-after 3)
-/Applications/Godot.app/Contents/MacOS/Godot --path . scenes/temp_test.tscn --headless --quit-after 3
+/Applications/Godot.app/Contents/MacOS/Godot --path . scenes/temp_map_test.tscn --headless --quit-after 3
 
 # 4. Clean up - delete the temporary test scene and script
-rm scenes/temp_test.tscn scripts/temp_test.gd
+rm scenes/temp_map_test.tscn scripts/temp_map_test.gd
 
 # Benefits:
 # - Self-contained testing of specific changes

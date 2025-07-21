@@ -177,3 +177,17 @@ Steamworks has no way to support direct connections by IP, always uses a steamwo
 Adding a discrete testing requirement to [agent_context_guide.md](../agent_context_guide.md) has proven very effective, though the file is getting way too large so I'll have to try the folder/relevantname.md idea.
 
 We should refactor the items to a more generic class to handle pickups (active and inactive) and not just weapons. This may also be a cheesey way to implement the passives (passive pickups like speed boosts will need a buff element, so we can make the duration -1 and persistent)
+
+Restoring the checkpoint in cursor rewinds the file system to the exact bytes that existed before the agent ran, but it does not rewind the agent’s internal scratchpad or the LLM’s hidden chain-of-thought.
+
+For future projects, during the PRD process we should ask it to generate example code so we can spot problems beforehand and integrate them into our PRD refinement process to iterate more quickly later. (multiple refactors in this project for items specifically)
+
+Really need to find a workaround for arguing with Claude about type safety... Claude always tries to remove type safety when we have circular dependency issues rather than implementing Interfaces. (you REALLY need to argue every angle for definition)
+
+Godot doesn't actually support interfaces, so we have to use duck typing (assume the type) or resolve the circular dependency at an architectural level. Decided to go with id based references to resolve it.
+
+Git management needs work, it's hard to make discrete commits without concious effort.
+
+Maybe we can use notepads for simple bug tracking 🤦‍♂️ this also allows us to incorporate it directly into cursor, though we need to preface it with some tags and info like they might be stale bugs.
+
+Texture atlases are used for quick sprite drawing (killfeeds etc.): Because the atlas is already resident, displaying a new line in the feed is just pushing a few vertices to the GPU—no file I/O, no per-icon texture creation, no stutter.
