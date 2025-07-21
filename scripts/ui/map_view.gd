@@ -1,534 +1,460 @@
 extends Control
 
-## MVP Map View Controller - Slay the Spire Style Visual Implementation
-## Creates a 4-layer tree map with authentic StS visual design
+## Map View Coordinator - Clean coordinator using new map architecture
+## Bridges MapGenerator, MapRenderer, and MapNavigation with existing UI structure
+
+# Preload map system classes
+const MapData = preload("res://scripts/map/core/map_data.gd")
+const MapNode = preload("res://scripts/map/core/map_node.gd")
+const MapGenerator = preload("res://scripts/map/core/map_generator.gd")
+const MapRenderer = preload("res://scripts/ui/map/map_renderer.gd")
+const MapNavigation = preload("res://scripts/map/navigation/map_navigation.gd")
 
 @onready var map_container: Control = $MapContainer
+@onready var start_game_button: Button = $UIContainer/StartGameButton
 @onready var back_button: Button = $UIContainer/BackButton
 @onready var test_minigame_button: Button = $UIContainer/TestMinigameButton
 
-# Voting UI elements (created dynamically)
-var voting_panel: Control = null
-var voting_buttons: Array[Button] = []
+# Core map system components
+var map_generator
+var map_renderer
+var map_navigation
+
+# Current map state
+var current_map_data
+var voting_ui_panel: Control = null
 var current_voting_decision: int = -1
 
-# MVP Map data structure (using simple dictionaries)
-var map_data: Dictionary = {}
-var current_node_id: String = ""
-var visited_nodes: Array[String] = []
-var node_buttons: Dictionary = {}
-var connection_lines: Array[Line2D] = []
-
-# Available minigames for random selection
-var available_minigames: Array[String] = ["sudden_death", "king_of_hill", "team_battle", "free_for_all"]
-
-# Visual configuration for Slay the Spire style
-var node_size: Vector2 = Vector2(64, 64)
-var layer_spacing: float = 120.0
-var node_spacing: float = 80.0
-
-# Node type icons (using text symbols for now, easily replaceable with actual icons)
-var node_icons: Dictionary = {
-	"tutorial": "🎯",
-	"sudden_death": "⚔️",
-	"king_of_hill": "👑", 
-	"team_battle": "🛡️",
-	"free_for_all": "💥",
-	"boss_battle": "🐉"
-}
-
 func _ready() -> void:
-	# Connect signals
+	# Connect UI signals
+	start_game_button.pressed.connect(_on_start_game_button_pressed)
 	back_button.pressed.connect(_on_back_button_pressed)
 	test_minigame_button.pressed.connect(_on_test_minigame_button_pressed)
 	
-	# Generate and display MVP map
-	_generate_mvp_map()
-	_display_map()
+	# Initialize map system components
+	_initialize_map_system()
 	
-	Logger.system("MVP Map view loaded with Slay the Spire styling", "MapView")
+	Logger.system("Map view coordinator loaded with new architecture", "MapView")
 
-## Generate a simple 4-layer tree map
-func _generate_mvp_map() -> void:
-	map_data = {
-		"nodes": {},
-		"connections": {},
-		"layers": 4,
-		"current_node": "start",
-		"final_node": "boss_finale"
-	}
+## Initialize the map system components and generate map
+func _initialize_map_system() -> void:
+	# Initialize map generator
+	map_generator = MapGenerator.new()
 	
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
+	# Initialize map renderer
+	map_renderer = MapRenderer.new()
+	map_renderer.node_selected.connect(_on_node_selected)
 	
-	# Layer 0: Start node
-	_create_node("start", 0, 0, "Start", "tutorial")
-	current_node_id = "start"
+	# Initialize navigation system
+	var party_progress = GameManager.get_party_progress()
+	map_navigation = MapNavigation.new(party_progress)
 	
-	# Generate layers 1-3 with random nodes
-	var previous_layer_nodes: Array[String] = ["start"]
-	
-	for layer in range(1, 4):
-		var nodes_in_layer = rng.randi_range(2, 5)
-		var current_layer_nodes: Array[String] = []
-		
-		for node_index in range(nodes_in_layer):
-			var node_id = "layer_" + str(layer) + "_node_" + str(node_index)
-			var minigame_type = available_minigames[rng.randi() % available_minigames.size()]
-			_create_node(node_id, layer, node_index, minigame_type.capitalize(), minigame_type)
-			current_layer_nodes.append(node_id)
-		
-		# Connect previous layer to current layer
-		_connect_layers(previous_layer_nodes, current_layer_nodes, rng)
-		previous_layer_nodes = current_layer_nodes
-	
-	# Layer 4: Final boss node (all paths lead here)
-	_create_node("boss_finale", 4, 0, "Final Boss", "boss_battle")
-	_connect_layers(previous_layer_nodes, ["boss_finale"], rng)
-	
-	Logger.system("Generated MVP map with " + str(map_data.nodes.size()) + " nodes", "MapView")
+	# Load existing map or generate new one
+	_initialize_or_load_map()
 
-## Create a node in the map data
-func _create_node(node_id: String, layer: int, index: int, display_name: String, minigame_type: String) -> void:
-	map_data.nodes[node_id] = {
-		"id": node_id,
-		"layer": layer,
-		"index": index,
-		"display_name": display_name,
-		"minigame_type": minigame_type,
-		"position": _calculate_node_position(layer, index, _count_nodes_in_layer(layer)),
-		"available": (node_id == "start"),  # Only start node available initially
-		"completed": false,
-		"connections_out": []
-	}
-
-## Connect nodes between layers
-func _connect_layers(from_layer: Array[String], to_layer: Array[String], rng: RandomNumberGenerator) -> void:
-	# Each node in from_layer connects to 1-3 nodes in to_layer
-	for from_node in from_layer:
-		var connections_to_make = rng.randi_range(1, min(3, to_layer.size()))
-		var possible_targets = to_layer.duplicate()
-		
-		for i in range(connections_to_make):
-			if possible_targets.is_empty():
-				break
-			
-			var target = possible_targets[rng.randi() % possible_targets.size()]
-			map_data.nodes[from_node].connections_out.append(target)
-			possible_targets.erase(target)
-
-## Calculate node position for Slay the Spire style layout
-func _calculate_node_position(layer: int, index: int, total_in_layer: int) -> Vector2:
-	var container_size: Vector2 = Vector2(800, 600)  # Default size
-	if map_container and map_container.size != Vector2.ZERO:
-		container_size = map_container.size
-	
-	# Vertical layout like Slay the Spire (bottom to top)
-	var y = container_size.y - (layer * layer_spacing) - 80  # Bottom to top progression
-	
-	# Center the layer horizontally
-	var total_width = (total_in_layer - 1) * node_spacing
-	var start_x = (container_size.x - total_width) / 2.0
-	var x = start_x + (index * node_spacing)
-	
-	return Vector2(x, y)
-
-## Count how many nodes will be in a layer (for positioning)
-func _count_nodes_in_layer(target_layer: int) -> int:
-	var count = 0
-	for node_data in map_data.nodes.values():
-		if node_data.layer == target_layer:
-			count += 1
-	return count + 1  # +1 for the node we're about to add
-
-## Display the map using Slay the Spire visual style
-func _display_map() -> void:
-	# Clear existing display
-	_clear_map_display()
-	
-	# Create connection lines first (behind nodes)
-	_draw_connections()
-	
-	# Create node buttons with icons
-	for node_id in map_data.nodes.keys():
-		_create_node_visual(node_id)
-	
-	# Update button states
-	_update_node_availability()
-
-## Clear previous map display
-func _clear_map_display() -> void:
-	for child in map_container.get_children():
-		child.queue_free()
-	node_buttons.clear()
-	connection_lines.clear()
-
-## Draw dotted connection lines like Slay the Spire
-func _draw_connections() -> void:
-	for node_id in map_data.nodes.keys():
-		var node_data = map_data.nodes[node_id]
-		for target_id in node_data.connections_out:
-			if target_id in map_data.nodes:
-				_create_dotted_connection(node_data.position, map_data.nodes[target_id].position)
-
-## Create a dotted connection line like Slay the Spire
-func _create_dotted_connection(from_pos: Vector2, to_pos: Vector2) -> void:
-	var line = Line2D.new()
-	
-	# Create dotted line effect
-	var distance = from_pos.distance_to(to_pos)
-	var direction = (to_pos - from_pos).normalized()
-	var dot_spacing = 8.0
-	var dot_count = int(distance / dot_spacing)
-	
-	for i in range(dot_count):
-		var start_pos = from_pos + direction * (i * dot_spacing)
-		var end_pos = from_pos + direction * (i * dot_spacing + 3.0)  # Small dots
-		
-		if i < dot_count - 1:  # Don't overdraw at the end
-			line.add_point(start_pos)
-			line.add_point(end_pos)
-	
-	line.default_color = Color(0.4, 0.3, 0.2, 0.8)  # Brown/sepia color
-	line.width = 2.0
-	line.z_index = -1  # Behind nodes
-	
-	map_container.add_child(line)
-	connection_lines.append(line)
-
-## Create a Slay the Spire style node visual
-func _create_node_visual(node_id: String) -> void:
-	var node_data = map_data.nodes[node_id]
-	
-	# Create a container for the node
-	var node_container = Control.new()
-	node_container.size = node_size
-	node_container.position = node_data.position - node_size / 2
-	
-	# Create background circle for the node
-	var background = ColorRect.new()
-	background.size = node_size
-	background.color = _get_node_background_color(node_data)
-	# Make it circular by using a custom shader or drawing (simplified with ColorRect for now)
-	node_container.add_child(background)
-	
-	# Create icon label
-	var icon_config = UIFactory.UIElementConfig.new()
-	icon_config.element_name = "NodeIcon_" + node_id
-	icon_config.text = node_icons.get(node_data.minigame_type, "❓")
-	icon_config.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_config.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	
-	var icon_label = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, icon_config)
-	if icon_label and icon_label is Label:
-		var label = icon_label as Label
-		label.size = node_size
-		label.add_theme_font_size_override("font_size", 24)
-		node_container.add_child(label)
-	
-	# Create invisible button for interaction
-	var button = Button.new()
-	button.size = node_size
-	button.flat = true  # No visual button appearance
-	button.pressed.connect(_on_node_pressed.bind(node_id))
-	node_container.add_child(button)
-	
-	# Store references
-	node_buttons[node_id] = button
-	map_container.add_child(node_container)
-
-## Get background color for node based on its state and type
-func _get_node_background_color(node_data: Dictionary) -> Color:
-	var node_id = node_data.id
-	
-	# State-based coloring
-	if node_id == current_node_id:
-		return Color(1.0, 1.0, 0.6, 1.0)  # Light yellow for current
-	elif node_id in visited_nodes:
-		return Color(0.5, 0.5, 0.5, 0.8)  # Gray for visited
-	elif node_data.available:
-		# Type-based coloring for available nodes
-		match node_data.minigame_type:
-			"tutorial":
-				return Color(0.7, 0.9, 0.7, 1.0)  # Light green
-			"boss_battle":
-				return Color(0.9, 0.4, 0.4, 1.0)  # Red for boss
-			_:
-				return Color(0.8, 0.8, 0.9, 1.0)  # Light blue for regular
+## Load existing map or generate new one
+func _initialize_or_load_map() -> void:
+	# Check if we have persistent map data
+	if GameManager.has_persistent_map():
+		Logger.system("Loading persistent map data", "MapView")
+		_load_persistent_map()
 	else:
-		return Color(0.3, 0.3, 0.3, 0.6)  # Dark gray for locked
+		Logger.system("No persistent map found, generating new map", "MapView")
+		_generate_and_setup_map()
 
-## Update which nodes are available/disabled
-func _update_node_availability() -> void:
-	for node_id in node_buttons.keys():
-		var button = node_buttons[node_id]
-		var node_data = map_data.nodes[node_id]
-		
-		# Check if node is available and not completed
-		var is_available = node_data.available and not node_data.completed
-		var is_visited = node_id in visited_nodes
-		
-		# Set button state
-		button.disabled = not is_available or is_visited
-		
-		# Update visual appearance by changing the container's modulate
-		var container = button.get_parent()
-		if container:
-			if is_visited:
-				container.modulate = Color(0.7, 0.7, 0.7, 1.0)  # Dimmed for visited
-			elif is_available:
-				container.modulate = Color(1.0, 1.0, 1.0, 1.0)  # Full brightness for available
-			else:
-				container.modulate = Color(0.5, 0.5, 0.5, 0.8)   # Dimmed for locked
-
-## Handle node button press
-func _on_node_pressed(node_id: String) -> void:
-	var node_data = map_data.nodes[node_id]
+## Load persistent map data from GameManager
+func _load_persistent_map() -> void:
+	# Get stored data from GameManager
+	current_map_data = GameManager.get_stored_map_data()
+	var navigation_data: Dictionary = GameManager.get_stored_navigation_data()
 	
-	# Check if this is a valid move
-	if not _can_move_to_node(node_id):
-		Logger.warning("Cannot move to node: " + node_id, "MapView")
+	if not current_map_data or navigation_data.is_empty():
+		Logger.error("Invalid persistent map data, generating new map", "MapView")
+		_generate_and_setup_map()
 		return
 	
-	# Check if there are multiple available nodes - trigger voting
-	var available_nodes: Array[String] = _get_available_nodes()
-	if available_nodes.size() > 1:
-		_start_node_voting(available_nodes)
+	# Initialize navigation system with stored data
+	map_navigation.initialize_map(navigation_data)
+	
+	# Connect to minigame completion events
+	if not EventBus.minigame_ended.is_connected(_on_minigame_completed):
+		EventBus.minigame_ended.connect(_on_minigame_completed)
+	
+	# Render the map
+	map_renderer.render(current_map_data, map_container)
+	
+	# Update renderer state with current available moves and visited nodes
+	var available_moves: Array[String] = map_navigation.get_available_moves()
+	var visited_nodes: Array[String] = map_navigation.get_visited_nodes()
+	map_renderer.update_state(current_map_data, available_moves, visited_nodes)
+	
+	Logger.game_flow("Persistent map loaded and rendered successfully", "MapView")
+
+## Generate map and initialize navigation
+func _generate_and_setup_map() -> void:
+	# Generate map using MapGenerator with default configuration
+	# The generator will automatically load the default MapGenerationConfig
+	current_map_data = map_generator.generate()
+	if not current_map_data:
+		Logger.error("Failed to generate map data", "MapView")
+		return
+	
+	# Convert to format expected by MapNavigation
+	var navigation_map_data: Dictionary = _convert_map_data_for_navigation(current_map_data)
+	
+	# Initialize navigation system with correct start node
+	var start_node_id: String = navigation_map_data.get("start_node", "")
+	map_navigation.initialize_map(navigation_map_data, start_node_id)
+	
+	# Connect to minigame completion events
+	if not EventBus.minigame_ended.is_connected(_on_minigame_completed):
+		EventBus.minigame_ended.connect(_on_minigame_completed)
+	
+	# Render the map
+	map_renderer.render(current_map_data, map_container)
+	
+	# Update renderer state with initial available moves and visited nodes
+	var available_moves: Array[String] = map_navigation.get_available_moves()
+	var visited_nodes: Array[String] = map_navigation.get_visited_nodes()
+	map_renderer.update_state(current_map_data, available_moves, visited_nodes)
+	
+	# Store map data for persistence
+	_store_map_data()
+	
+	Logger.game_flow("Map generated and rendered successfully", "MapView")
+
+## Store current map data for persistence
+func _store_map_data() -> void:
+	if current_map_data and map_navigation:
+		var navigation_map_data: Dictionary = _convert_map_data_for_navigation(current_map_data)
+		GameManager.store_map_data(current_map_data, navigation_map_data)
+
+## Convert MapData to format expected by MapNavigation
+func _convert_map_data_for_navigation(map_data) -> Dictionary:
+	var nav_data: Dictionary = {
+		"nodes": {},
+		"connections": {},
+		"start_node": "",
+		"final_node": ""
+	}
+	
+	# Convert nodes
+	for node in map_data.nodes.values():
+		nav_data.nodes[node.id] = {
+			"id": node.id,
+			"layer": node.layer,
+			"index": node.index,
+			"node_type": node.node_type,
+			"available": (node.node_type == "start")
+		}
+		
+		# Set start and final nodes
+		if node.node_type == "start":
+			nav_data.start_node = node.id
+		elif node.node_type == "boss":
+			nav_data.final_node = node.id
+		
+		# Convert connections
+		nav_data.connections[node.id] = node.outgoing_connections.duplicate()
+	
+	return nav_data
+
+## Handle node selection from renderer
+func _on_node_selected(node_id: String) -> void:
+	Logger.game_flow("Node selected: " + node_id, "MapView")
+	
+	# If clicking current node, start its minigame
+	if node_id == map_navigation.current_node_id:
+		_start_current_node_minigame()
+		return
+	
+	# Get available moves from navigation
+	var available_moves: Array[String] = map_navigation.get_available_moves()
+	
+	# Check if the selected node is a valid move
+	if node_id not in available_moves:
+		Logger.warning("Selected node is not available for movement: " + node_id, "MapView")
+		return
+	
+	# If multiple moves available, start voting; otherwise move directly
+	if available_moves.size() > 1:
+		_start_movement_voting(available_moves)
 	else:
-		# Single option - move directly
-		_move_to_node(node_id)
+		_execute_move_to_node(node_id)
 
-## Check if player can move to a specific node
-func _can_move_to_node(target_node_id: String) -> bool:
-	# Cannot move to already visited nodes
-	if target_node_id in visited_nodes:
+## Execute movement to a specific node
+func _execute_move_to_node(node_id: String) -> bool:
+	var success: bool = map_navigation.move_to_node(node_id)
+	if success:
+		Logger.game_flow("Successfully moved to node: " + node_id, "MapView")
+		
+		# Update renderer state after navigation change
+		var available_moves: Array[String] = map_navigation.get_available_moves()
+		var visited_nodes: Array[String] = map_navigation.get_visited_nodes()
+		map_renderer.update_state(current_map_data, available_moves, visited_nodes)
+		
+		# Start minigame for the new node
+		var node = current_map_data.get_node(node_id)
+		if node and node.node_type != "start":
+			_start_node_minigame(node)
+		
+		return true
+	else:
+		Logger.warning("Failed to move to node: " + node_id, "MapView")
 		return false
-	
-	# Must be connected to current node
-	var current_node_data = map_data.nodes[current_node_id]
-	if not target_node_id in current_node_data.connections_out:
-		return false
-	
-	# Node must be available (unlocked nodes are automatically available)
-	var target_node_data = map_data.nodes[target_node_id]
-	return target_node_data.available
 
-## Move player to a node and start appropriate action
-func _move_to_node(node_id: String) -> void:
-	var node_data = map_data.nodes[node_id]
+## Start minigame for a specific node
+func _start_node_minigame(node) -> void:
+	Logger.game_flow("Starting minigame for node: " + node.id + " (type: " + node.node_type + ")", "MapView")
 	
-	# Mark current node as visited and completed
-	if current_node_id != "":
-		visited_nodes.append(current_node_id)
-		map_data.nodes[current_node_id].completed = true
+	# Map node types directly to minigame types
+	var minigame_type: String = node.node_type
 	
-	# Update current position
-	current_node_id = node_id
-	map_data.current_node = node_id
+	match node.node_type:
+		"start":
+			minigame_type = "sudden_death"  # Start always uses sudden_death
+		"boss":
+			minigame_type = "sudden_death"  # Boss uses sudden_death (could be enhanced later)
+		"normal":
+			minigame_type = "sudden_death"  # Fallback for any remaining normal nodes
+		"sudden_death", "shop", "race", "gem_collection", "tag":
+			minigame_type = node.node_type  # Use the node type directly as minigame type
+		_:
+			minigame_type = "sudden_death"  # Fallback for unknown types
 	
-	# Unlock connected nodes
-	_unlock_connected_nodes(node_id)
-	
-	# Update visual state
-	_update_node_availability()
-	
-	Logger.game_flow("Moved to node: " + node_data.display_name, "MapView")
-	
-	# Start the minigame for this node
-	if node_data.minigame_type != "tutorial":
-		_start_node_minigame(node_data)
-
-## Unlock nodes connected to the given node
-func _unlock_connected_nodes(node_id: String) -> void:
-	var node_data = map_data.nodes[node_id]
-	for connected_id in node_data.connections_out:
-		if connected_id in map_data.nodes:
-			map_data.nodes[connected_id].available = true
-
-## Start the minigame for a node
-func _start_node_minigame(node_data: Dictionary) -> void:
-	Logger.game_flow("Starting minigame: " + node_data.minigame_type, "MapView")
-	
-	# For MVP, just start sudden_death for all nodes (until more minigames exist)
-	var minigame_type = "sudden_death"  # Default to working minigame
-	if node_data.minigame_type == "boss_battle":
-		minigame_type = "sudden_death"  # Boss uses same minigame for now
-	
+	# Start the minigame through GameManager
 	GameManager.start_minigame(minigame_type)
 
-## Get all currently available nodes for movement
-func _get_available_nodes() -> Array[String]:
-	var available: Array[String] = []
-	var current_node_data = map_data.nodes[current_node_id]
+## Start movement voting
+func _start_movement_voting(available_moves: Array[String]) -> void:
+	Logger.game_flow("Starting movement voting with " + str(available_moves.size()) + " options", "MapView")
 	
-	for connected_id in current_node_data.connections_out:
-		if _can_move_to_node(connected_id):
-			available.append(connected_id)
-	
-	return available
+	# Start voting through navigation system
+	current_voting_decision = map_navigation.start_node_voting(30)
+	if current_voting_decision >= 0:
+		_create_voting_ui(available_moves)
+		_start_voting_monitor()
 
-## Start voting process for node selection
-func _start_node_voting(available_node_ids: Array[String]) -> void:
-	Logger.game_flow("Starting node voting with " + str(available_node_ids.size()) + " options", "MapView")
-	
-	# Add voting decision to party progress
-	var party_progress: PartyProgressData = GameManager.get_party_progress()
-	if party_progress:
-		var node_ids_int: Array[int] = []
-		for node_id in available_node_ids:
-			# Extract numeric part from node ID (e.g., "layer_1_node_2" -> 2)
-			var parts = node_id.split("_")
-			if parts.size() >= 3:
-				node_ids_int.append(int(parts[2]))
-			else:
-				node_ids_int.append(0)
-		
-		current_voting_decision = party_progress.add_node_voting(node_ids_int, 30)
-		
-		# Create voting UI
-		_create_voting_ui(available_node_ids)
-		
-		# Start voting timer
-		_start_voting_timer()
-
-## Create voting UI for node selection
-func _create_voting_ui(available_node_ids: Array[String]) -> void:
-	# Remove existing voting panel if present
-	if voting_panel:
-		voting_panel.queue_free()
-		voting_panel = null
+## Create voting UI using UIFactory patterns
+func _create_voting_ui(available_moves: Array[String]) -> void:
+	# Clean up existing voting UI
+	_cleanup_voting_ui()
 	
 	# Create voting panel using UIFactory
-	var panel_config = UIFactory.UIElementConfig.new()
+	var panel_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
 	panel_config.element_name = "VotingPanel"
-	voting_panel = UIFactory.create_ui_element(UIFactory.UIElementType.PANEL, panel_config) as Control
+	panel_config.size = Vector2(800, 120)
+	panel_config.position = Vector2(0, map_container.size.y - 140)
 	
-	if voting_panel:
-		# Position panel at bottom of screen
-		voting_panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-		voting_panel.size.y = 120
-		voting_panel.position.y -= 120
+	voting_ui_panel = UIFactory.create_ui_element(UIFactory.UIElementType.PANEL, panel_config) as Control
+	if not voting_ui_panel:
+		Logger.error("Failed to create voting panel", "MapView")
+		return
+	
+	# Add title label
+	var title_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
+	title_config.element_name = "VotingTitle"
+	title_config.text = "Vote for Next Node:"
+	title_config.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_config.size = Vector2(800, 30)
+	title_config.position = Vector2(0, 10)
+	
+	var title_label: Label = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, title_config) as Label
+	if title_label:
+		voting_ui_panel.add_child(title_label)
+	
+	# Create voting buttons for each available move
+	var button_width: float = 780.0 / available_moves.size()
+	
+	for i in range(available_moves.size()):
+		var node_id: String = available_moves[i]
+		var node = current_map_data.get_node(node_id)
+		var display_text: String = _get_node_display_name(node)
 		
-		# Add title label
-		var title_config = UIFactory.UIElementConfig.new()
-		title_config.element_name = "VotingTitle"
-		title_config.text = "Vote for Next Node:"
-		title_config.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		var title_label = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, title_config)
-		if title_label:
-			voting_panel.add_child(title_label)
-			title_label.position = Vector2(0, 10)
-			title_label.size = Vector2(voting_panel.size.x, 30)
+		var button_config: UIFactory.UIElementConfig = UIFactory.UIElementConfig.new()
+		button_config.element_name = "VoteButton_" + str(i)
+		button_config.text = display_text
+		button_config.size = Vector2(button_width - 10, 40)
+		button_config.position = Vector2(i * button_width + 10, 50)
 		
-		# Create voting buttons
-		voting_buttons.clear()
-		var button_width: float = voting_panel.size.x / available_node_ids.size()
-		
-		for i in range(available_node_ids.size()):
-			var node_id: String = available_node_ids[i]
-			var node_data = map_data.nodes[node_id]
-			
-			var button_config = UIFactory.UIElementConfig.new()
-			button_config.element_name = "VoteButton_" + node_id
-			button_config.text = node_data.display_name
-			var vote_button = UIFactory.create_ui_element(UIFactory.UIElementType.BUTTON, button_config) as Button
-			
-			if vote_button:
-				voting_panel.add_child(vote_button)
-				vote_button.position = Vector2(i * button_width + 10, 50)
-				vote_button.size = Vector2(button_width - 20, 40)
-				
-				# Connect vote handler
-				var node_index: int = i
-				vote_button.pressed.connect(_on_vote_button_pressed.bind(node_index))
-				voting_buttons.append(vote_button)
-		
-		# Add voting panel to the map container
-		map_container.add_child(voting_panel)
-		Logger.system("Created voting UI with " + str(voting_buttons.size()) + " options", "MapView")
+		var vote_button: Button = UIFactory.create_ui_element(UIFactory.UIElementType.BUTTON, button_config) as Button
+		if vote_button:
+			voting_ui_panel.add_child(vote_button)
+			vote_button.pressed.connect(_on_vote_button_pressed.bind(node_id))
+	
+	# Add voting panel to map container
+	map_container.add_child(voting_ui_panel)
+	Logger.system("Created voting UI with " + str(available_moves.size()) + " options", "MapView")
+
+## Get display name for a node
+func _get_node_display_name(node) -> String:
+	if not node:
+		return "Unknown"
+	
+	match node.node_type:
+		"start":
+			return "Start"
+		"boss":
+			return "Boss Battle"
+		"normal":
+			return "Combat Node"
+		_:
+			return "Node " + str(node.index)
 
 ## Handle vote button press
-func _on_vote_button_pressed(option_index: int) -> void:
-	var party_progress: PartyProgressData = GameManager.get_party_progress()
-	if party_progress and current_voting_decision >= 0:
-		# TODO: Get actual player ID for local player
-		var local_player_id: int = 0  # For now, assume player 0 is local
-		
-		var voted: bool = party_progress.vote_for_node(current_voting_decision, local_player_id, option_index)
-		if voted:
-			Logger.game_flow("Player " + str(local_player_id) + " voted for option " + str(option_index), "MapView")
-			
-			# Disable all voting buttons after voting
-			for button in voting_buttons:
-				button.disabled = true
-			
-			# Check if voting is complete
-			_check_voting_completion()
+func _on_vote_button_pressed(node_id: String) -> void:
+	Logger.game_flow("Vote submitted for node: " + node_id, "MapView")
+	
+	# TODO: Get actual local player ID
+	var local_player_id: int = 0
+	
+	# Submit vote through navigation
+	var success: bool = map_navigation.vote_for_move(current_voting_decision, local_player_id, node_id)
+	if success:
+		# Disable all voting buttons after successful vote
+		if voting_ui_panel:
+			for child in voting_ui_panel.get_children():
+				if child is Button:
+					child.disabled = true
+	else:
+		Logger.warning("Failed to submit vote for node: " + node_id, "MapView")
 
-## Start voting timer and monitor completion
-func _start_voting_timer() -> void:
-	# Create a timer to check voting completion
+## Start voting monitor
+func _start_voting_monitor() -> void:
 	var timer: Timer = Timer.new()
-	timer.wait_time = 1.0  # Check every second
+	timer.wait_time = 1.0
 	timer.timeout.connect(_check_voting_completion)
 	timer.autostart = true
 	add_child(timer)
 
-## Check if voting is complete and resolve if needed
+## Check voting completion
 func _check_voting_completion() -> void:
-	var party_progress: PartyProgressData = GameManager.get_party_progress()
-	if not party_progress or current_voting_decision < 0:
-		return
-	
-	if party_progress.is_voting_complete(current_voting_decision):
-		_resolve_voting()
+	var party_progress = GameManager.get_party_progress()
+	if party_progress and current_voting_decision >= 0:
+		if party_progress.is_voting_complete(current_voting_decision):
+			_resolve_voting()
 
-## Resolve completed voting and move to chosen node
+## Resolve voting
 func _resolve_voting() -> void:
-	var party_progress: PartyProgressData = GameManager.get_party_progress()
-	if not party_progress or current_voting_decision < 0:
-		return
-	
-	# Get voting results
-	var results: Dictionary = party_progress.get_voting_results(current_voting_decision)
-	var chosen_option: int = party_progress.resolve_voting(current_voting_decision)
-	
-	Logger.game_flow("Voting completed. Chosen option: " + str(chosen_option), "MapView")
-	Logger.system("Voting results: " + str(results), "MapView")
-	
-	# Get the available nodes and select the chosen one
-	var available_nodes: Array[String] = _get_available_nodes()
-	if chosen_option >= 0 and chosen_option < available_nodes.size():
-		var chosen_node_id: String = available_nodes[chosen_option]
+	var success: bool = map_navigation.resolve_node_voting(current_voting_decision)
+	if success:
+		var chosen_node: String = map_navigation.current_node_id
+		Logger.game_flow("Voting resolved and moved to: " + chosen_node, "MapView")
 		
-		# Clean up voting UI
-		_cleanup_voting_ui()
+		# Update renderer state after voting resolution
+		var available_moves: Array[String] = map_navigation.get_available_moves()
+		var visited_nodes: Array[String] = map_navigation.get_visited_nodes()
+		map_renderer.update_state(current_map_data, available_moves, visited_nodes)
 		
-		# Move to chosen node
-		_move_to_node(chosen_node_id)
-	else:
-		Logger.error("Invalid voting result: " + str(chosen_option), "MapView")
 		_cleanup_voting_ui()
+		current_voting_decision = -1
+		
+		# Start minigame for the new node
+		var node = current_map_data.get_node(chosen_node)
+		if node and node.node_type != "start":
+			_start_node_minigame(node)
 
 ## Clean up voting UI
 func _cleanup_voting_ui() -> void:
-	if voting_panel:
-		voting_panel.queue_free()
-		voting_panel = null
+	if voting_ui_panel:
+		voting_ui_panel.queue_free()
+		voting_ui_panel = null
 	
-	voting_buttons.clear()
-	current_voting_decision = -1
-	
-	# Remove any voting timers
+	# Remove voting timers
 	for child in get_children():
 		if child is Timer and child.timeout.is_connected(_check_voting_completion):
 			child.queue_free()
+	
+	Logger.debug("Voting UI cleaned up", "MapView")
 
+## Handle completion of current node (called when minigame ends)
+func _on_node_completed() -> void:
+	Logger.game_flow("Current node completed", "MapView")
+	map_navigation.mark_node_completed(map_navigation.current_node_id)
+	
+	# Update renderer state after completing node and unlocking new paths
+	var available_moves: Array[String] = map_navigation.get_available_moves()
+	var visited_nodes: Array[String] = map_navigation.get_visited_nodes()
+	map_renderer.update_state(current_map_data, available_moves, visited_nodes)
+	
+	# Check if map is complete
+	if map_navigation.is_map_complete():
+		Logger.game_flow("Map progression completed!", "MapView")
+		# TODO: Handle map completion (victory screen, etc.)
+	else:
+		# Auto-start voting or movement for next available options
+		if available_moves.size() > 1:
+			_start_movement_voting(available_moves)
+		elif available_moves.size() == 1:
+			_execute_move_to_node(available_moves[0])
+
+# Navigation signal handlers (simplified)
+func _on_move_requested(node_id: String) -> void:
+	Logger.debug("Move requested to: " + node_id, "MapView")
+
+func _on_navigation_node_completed(node_id: String) -> void:
+	Logger.debug("Node completed: " + node_id, "MapView")
+
+func _on_nodes_unlocked(unlocked_nodes: Array[String]) -> void:
+	Logger.debug("Nodes unlocked: " + str(unlocked_nodes), "MapView")
+
+## UI Button handlers
 func _on_back_button_pressed() -> void:
 	Logger.game_flow("Returning to main menu", "MapView")
+	_cleanup_resources()
 	EventBus.request_scene_transition("res://scenes/ui/main_menu.tscn")
 	GameManager.transition_to_menu()
 
+func _on_start_game_button_pressed() -> void:
+	Logger.game_flow("Starting game from start node", "MapView")
+	# Start the minigame for the current start node
+	_start_current_node_minigame()
+
 func _on_test_minigame_button_pressed() -> void:
 	Logger.game_flow("Starting test minigame", "MapView")
-	GameManager.start_minigame("sudden_death") 
+	GameManager.start_minigame("sudden_death")
+
+## Start the minigame for the current node
+func _start_current_node_minigame() -> void:
+	var current_node_id: String = map_navigation.current_node_id
+	var node_data = current_map_data.get_node(current_node_id)
+	
+	if node_data:
+		Logger.game_flow("Starting minigame for node: " + current_node_id, "MapView")
+		# All nodes use sudden_death for now
+		GameManager.start_minigame("sudden_death")
+	else:
+		Logger.error("Cannot start minigame: current node not found", "MapView")
+
+## Handle minigame completion to unlock connected nodes
+func _on_minigame_completed(minigame_type: String, results: Dictionary) -> void:
+	Logger.game_flow("Minigame completed: " + minigame_type, "MapView")
+	
+	# Mark current node as completed and unlock connected nodes
+	var current_node_id: String = map_navigation.current_node_id
+	map_navigation.mark_node_completed(current_node_id)
+	map_navigation.unlock_connected_nodes(current_node_id)
+	
+	# Update renderer to show newly available nodes
+	var available_moves: Array[String] = map_navigation.get_available_moves()
+	var visited_nodes: Array[String] = map_navigation.get_visited_nodes()
+	map_renderer.update_state(current_map_data, available_moves, visited_nodes)
+	
+	# Store updated navigation state
+	_store_map_data()
+	
+	Logger.game_flow("Connected nodes unlocked after completing: " + current_node_id, "MapView")
+
+## Clean up resources on exit
+func _cleanup_resources() -> void:
+	_cleanup_voting_ui()
+	
+	# Clear map renderer
+	if map_renderer:
+		map_renderer = null
+	
+	Logger.debug("Map view resources cleaned up", "MapView")
+
+## Handle scene exit
+func _exit_tree() -> void:
+	_cleanup_resources()

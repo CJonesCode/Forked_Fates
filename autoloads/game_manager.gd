@@ -31,12 +31,16 @@ var session_id: String = ""
 var current_map_node: int = 0
 var current_minigame: String = ""
 
+# Map persistence
+var persistent_map_data = null  # MapData object
+var persistent_map_navigation_data: Dictionary = {}
+
 # Party-wide progress tracking
 var party_progress: PartyProgressData
 
 # Player management
 var players: Dictionary = {} # player_id -> PlayerData
-var max_players: int = 4
+var max_players: int = 2
 var local_player_id: int = 0
 
 # Networking (Steam integration)
@@ -253,6 +257,9 @@ func start_local() -> void:
 	network_enabled = false
 	is_host = false
 	
+	# Clear any persistent map data for new game
+	clear_persistent_map()
+	
 	# Resources will be loaded lazily when needed (following lazy loading principles)
 	# No need for explicit preloading since all systems use lazy initialization
 	
@@ -279,8 +286,6 @@ func _initialize_session() -> void:
 		# Create test players for local gameplay - Names are 1-based, IDs are 0-based for clear distinction
 		add_player(0, "Player 1")
 		add_player(1, "Player 2") 
-		add_player(2, "Player 3")
-		add_player(3, "Player 4")
 		Logger.system("Created test players for local session with 1-based names and 0-based IDs", "GameManager")
 	else:
 		Logger.system("Initialized empty session for multiplayer", "GameManager")
@@ -695,4 +700,30 @@ func is_multiplayer_session() -> bool:
 
 ## Get party progress data
 func get_party_progress() -> PartyProgressData:
-	return party_progress 
+	return party_progress
+
+## Map Persistence Methods
+
+## Store map data for persistence between scenes
+func store_map_data(map_data, navigation_data: Dictionary) -> void:
+	persistent_map_data = map_data
+	persistent_map_navigation_data = navigation_data.duplicate()
+	Logger.system("Map data stored for persistence", "GameManager")
+
+## Get stored map data
+func get_stored_map_data():
+	return persistent_map_data
+
+## Get stored navigation data
+func get_stored_navigation_data() -> Dictionary:
+	return persistent_map_navigation_data.duplicate()
+
+## Check if we have persistent map data
+func has_persistent_map() -> bool:
+	return persistent_map_data != null
+
+## Clear persistent map data (start new map)
+func clear_persistent_map() -> void:
+	persistent_map_data = null
+	persistent_map_navigation_data.clear()
+	Logger.system("Persistent map data cleared", "GameManager") 

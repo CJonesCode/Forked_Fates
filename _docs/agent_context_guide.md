@@ -1327,6 +1327,8 @@ Architecture is stable. Use established patterns: components, factories, configs
 
 ### **Testing Commands**
 
+**CRITICAL**: Always use `--quit-after 3` with `--headless` to prevent infinite hanging. The parameter specifies **iterations** (not seconds), forcing Godot to exit after 3 main loop cycles even if scripts fail to load or hang.
+
 #### **System Health Test (Headless)**
 ```bash
 # Test for system health and initialization (macOS)
@@ -1338,6 +1340,21 @@ Architecture is stable. Use established patterns: components, factories, configs
 # - No "RID allocations leaked" messages
 # - All autoloads initialize successfully
 # - Clean shutdown with "cleanup completed" messages
+```
+
+#### **Scene-Specific Testing (Recommended)**
+```bash
+# Test minigame system (~1.2s, validates full minigame pipeline)
+/Applications/Godot.app/Contents/MacOS/Godot --headless --quit-after 3 scenes/minigames/sudden_death_minigame.tscn
+
+# Test UI system (~1.2s, validates menu and UI systems)
+/Applications/Godot.app/Contents/MacOS/Godot --headless --quit-after 3 scenes/ui/main_menu.tscn
+
+# Benefits:
+# - 4x faster than default scene loading (~1.2s vs 5s)
+# - Tests specific game systems and components
+# - Better logging shows component initialization
+# - Modular testing of different subsystems
 ```
 
 #### **Create Temporary Test Scene Pattern**
@@ -1354,8 +1371,8 @@ Architecture is stable. Use established patterns: components, factories, configs
 #     print("Test passed: ", test_element != null)
 #     get_tree().quit()  # Auto-exit after test
 
-# 3. Run the test scene directly
-/Applications/Godot.app/Contents/MacOS/Godot --path . scenes/temp_test.tscn --headless
+# 3. Run the test scene directly (ALWAYS include --quit-after 3)
+/Applications/Godot.app/Contents/MacOS/Godot --path . scenes/temp_test.tscn --headless --quit-after 3
 
 # 4. Clean up - delete the temporary test scene and script
 rm scenes/temp_test.tscn scripts/temp_test.gd
@@ -1365,10 +1382,11 @@ rm scenes/temp_test.tscn scripts/temp_test.gd
 # - No impact on main codebase
 # - Quick validation before committing changes
 # - Easy to create, test, and remove
+# - Safe from hanging with --quit-after 3
 ```
 
 #### **Direct Scene Testing Pattern**
 ```bash
-# Run any existing scene directly for testing
-/Applications/Godot.app/Contents/MacOS/Godot --path . path/to/your/scene.tscn
+# Run any existing scene directly for testing (ALWAYS include --quit-after 3)
+/Applications/Godot.app/Contents/MacOS/Godot --path . path/to/your/scene.tscn --headless --quit-after 3
 ```

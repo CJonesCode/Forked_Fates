@@ -56,6 +56,9 @@ signal round_ended()
 # Map navigation signals
 signal map_node_selected(node_id: int)
 signal map_progression_updated(current_node: int)
+signal map_move_requested(node_id: String)
+signal map_node_completed(node_id: String)
+signal map_nodes_unlocked(unlocked_nodes: Array[String])
 
 # Game state signals
 signal scene_transition_requested(scene_path: String)
@@ -247,6 +250,16 @@ func emit_item_used(player_id: int, item_name: String) -> void:
 ## Request a scene transition
 func request_scene_transition(scene_path: String) -> void:
 	scene_transition_requested.emit(scene_path)
+
+## Map navigation event helpers
+func emit_map_move_requested(node_id: String) -> void:
+	map_move_requested.emit(node_id)
+
+func emit_map_node_completed(node_id: String) -> void:
+	map_node_completed.emit(node_id)
+
+func emit_map_nodes_unlocked(unlocked_nodes: Array[String]) -> void:
+	map_nodes_unlocked.emit(unlocked_nodes)
 
 ## Network event helpers
 

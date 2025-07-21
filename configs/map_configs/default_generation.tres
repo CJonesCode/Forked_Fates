@@ -1,0 +1,17 @@
+[gd_resource type="Resource" format=3 load_steps=2]
+
+[ext_resource type="Script" path="res://scripts/map/config/map_generation_config.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+layer_count = 5
+nodes_per_layer_range = Vector2i(2, 5)
+min_connections_per_node = 1
+max_connections_per_node = 3
+additional_connection_chance = 0.3
+available_node_types = Array[String](["sudden_death", "shop", "race", "gem_collection", "tag"])
+special_node_weight = 0.8
+seed_value = -1
+ensure_connectivity = true
+max_generation_attempts = 10
+scale_by_layer = true

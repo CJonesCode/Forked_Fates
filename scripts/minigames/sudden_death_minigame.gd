@@ -101,6 +101,9 @@ func _on_physics_initialize() -> void:
 	await get_tree().process_frame  # Wait for HUD to be ready
 	_connect_hud_to_victory_manager()
 	
+	# Create hotkey overlays for player controls
+	_create_hotkey_overlays()
+	
 	Logger.system("SuddenDeathMinigame initialized with projectile weapon system", "SuddenDeathMinigame")
 
 ## Override tutorial process to add debug logging
@@ -456,5 +459,113 @@ func _on_physics_end(result: MinigameResult) -> void:
 	
 	# Clear kill tracking data (simplified)
 	player_kills.clear()
+
+## Create hotkey overlays for player controls
+func _create_hotkey_overlays() -> void:
+	if not ui_overlay:
+		Logger.warning("No UI overlay found for hotkey displays", "SuddenDeathMinigame")
+		return
+	
+	# Create Player 1 hotkey overlay (bottom left-center)
+	_create_player_hotkey_overlay(0, "Player 1", 
+		{
+			"Move": "A/D", 
+			"Jump": "W", 
+			"Fire/Pickup": "S", 
+			"Drop/Throw": "Q"
+		}, 
+		Vector2(300, -140), 
+		Color(1.0, 0.3, 0.3)  # Red
+	)
+	
+	# Create Player 2 hotkey overlay (bottom right-center)
+	_create_player_hotkey_overlay(1, "Player 2", 
+		{
+			"Move": "L/'", 
+			"Jump": "P", 
+			"Fire/Pickup": ";", 
+			"Drop/Throw": "O"
+		}, 
+		Vector2(-400, -140), 
+		Color(0.3, 0.3, 1.0)  # Blue
+	)
+
+## Create individual player hotkey overlay
+func _create_player_hotkey_overlay(player_id: int, player_name: String, controls: Dictionary, position: Vector2, color: Color) -> void:
+	# Create main container
+	var container = VBoxContainer.new()
+	container.name = "Player" + str(player_id + 1) + "HotkeyOverlay"
+	
+	# Position overlay
+	if position.x < 0:  # Right side positioning
+		container.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+		container.position.x = position.x
+	else:  # Left side positioning
+		container.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+		container.position.x = position.x
+	container.position.y = position.y
+	
+	# Create background panel
+	var background = Panel.new()
+	var style_box = StyleBoxFlat.new()
+	style_box.bg_color = Color(0.1, 0.1, 0.1, 0.8)  # Semi-transparent dark background
+	style_box.border_color = color
+	style_box.border_width_left = 2
+	style_box.border_width_right = 2
+	style_box.border_width_top = 2
+	style_box.border_width_bottom = 2
+	style_box.corner_radius_top_left = 8
+	style_box.corner_radius_top_right = 8
+	style_box.corner_radius_bottom_left = 8
+	style_box.corner_radius_bottom_right = 8
+	background.add_theme_stylebox_override("panel", style_box)
+	
+	# Create content container
+	var content_container = VBoxContainer.new()
+	content_container.add_theme_constant_override("separation", 4)
+	
+	# Add padding
+	var margin_container = MarginContainer.new()
+	margin_container.add_theme_constant_override("margin_left", 12)
+	margin_container.add_theme_constant_override("margin_right", 12)
+	margin_container.add_theme_constant_override("margin_top", 8)
+	margin_container.add_theme_constant_override("margin_bottom", 8)
+	
+	# Create player name header using UIFactory
+	var header_config = UIFactory.UIElementConfig.new()
+	header_config.element_name = "Player" + str(player_id + 1) + "Header"
+	header_config.text = player_name
+	header_config.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	
+	var header_label = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, header_config)
+	if header_label and header_label is Label:
+		var label = header_label as Label
+		label.add_theme_font_size_override("font_size", 14)
+		label.add_theme_color_override("font_color", color)
+		content_container.add_child(label)
+	
+	# Add control mappings using UIFactory
+	for action in controls.keys():
+		var control_config = UIFactory.UIElementConfig.new()
+		control_config.element_name = "Control_" + action + "_P" + str(player_id + 1)
+		control_config.text = action + ": " + str(controls[action])
+		control_config.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		
+		var control_label = UIFactory.create_ui_element(UIFactory.UIElementType.LABEL, control_config)
+		if control_label and control_label is Label:
+			var label = control_label as Label
+			label.add_theme_font_size_override("font_size", 10)
+			label.add_theme_color_override("font_color", Color.WHITE)
+			content_container.add_child(label)
+	
+	# Assemble the overlay structure
+	margin_container.add_child(content_container)
+	background.add_child(margin_container)
+	container.add_child(background)
+	
+	# Add to UI overlay
+	ui_overlay.add_child(container)
+	
+	Logger.system("Created hotkey overlay for " + player_name, "SuddenDeathMinigame")
 	
 	Logger.system("SuddenDeathMinigame cleanup completed with simplified kill tracking", "SuddenDeathMinigame") 

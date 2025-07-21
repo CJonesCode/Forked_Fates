@@ -18,12 +18,6 @@ var player_lookup: Dictionary = {}  # player_id -> BasePlayer
 var player_colors: Array[Color] = [
 	Color(1.0, 0.3, 0.3, 1.0),  # Red (Player 1 - ID 0)
 	Color(0.3, 0.3, 1.0, 1.0),  # Blue (Player 2 - ID 1)
-	Color(0.3, 1.0, 0.3, 1.0),  # Green (Player 3 - ID 2)
-	Color(1.0, 1.0, 0.3, 1.0),  # Yellow (Player 4 - ID 3)
-	Color(1.0, 0.3, 1.0, 1.0),  # Magenta (Player 5 - ID 4)
-	Color(0.3, 1.0, 1.0, 1.0),  # Cyan (Player 6 - ID 5)
-	Color(1.0, 0.6, 0.3, 1.0),  # Orange (Player 7 - ID 6)
-	Color(0.6, 0.3, 1.0, 1.0),  # Purple (Player 8 - ID 7)
 ]
 
 # Signals

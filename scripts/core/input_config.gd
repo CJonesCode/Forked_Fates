@@ -52,27 +52,7 @@ static func create_default_configs() -> Array[InputConfig]:
 	p2_config.pickup_action = "p2_pickup"
 	configs.append(p2_config)
 	
-	# Player 3 - IJKL (momentum-based controls)
-	var p3_config = InputConfig.new()
-	p3_config.device_type = InputDevice.KEYBOARD_IJKL
-	p3_config.move_left_action = "p3_move_left"
-	p3_config.move_right_action = "p3_move_right"
-	p3_config.jump_action = "p3_jump"
-	p3_config.fire_action = "p3_fire"
-	p3_config.throw_action = "p3_throw"
-	p3_config.pickup_action = "p3_pickup"
-	configs.append(p3_config)
-	
-	# Player 4 - Numpad (momentum-based controls)
-	var p4_config = InputConfig.new()
-	p4_config.device_type = InputDevice.KEYBOARD_NUMPAD
-	p4_config.move_left_action = "p4_move_left"
-	p4_config.move_right_action = "p4_move_right"
-	p4_config.jump_action = "p4_jump"
-	p4_config.fire_action = "p4_fire"
-	p4_config.throw_action = "p4_throw"
-	p4_config.pickup_action = "p4_pickup"
-	configs.append(p4_config)
+
 	
 	return configs
 

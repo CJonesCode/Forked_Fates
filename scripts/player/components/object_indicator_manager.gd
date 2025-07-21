@@ -26,9 +26,15 @@ var bob_enabled: bool = true
 var bob_amplitude: float = 3.0
 var bob_speed: float = 2.0
 
+# Fixed width scaling configuration
+var max_width: float = -1.0  # -1 = no width constraint, >0 = max width in pixels
+var scale_to_fit: bool = false  # Whether to scale indicators to fit within max_width
+var maintain_aspect_ratio: bool = true  # Whether to maintain aspect ratio when scaling
+
 # State tracking
 var active_indicators: Dictionary = {}  # indicator_id -> ObjectIndicator
 var auto_remove_timers: Dictionary = {}  # indicator_id -> float (remaining time)
+var collections: Dictionary = {}  # collection_id -> {items: Dictionary, sort_key: String}
 var base_offset: Vector2
 var bob_timer: float = 0.0
 var target_object: Node = null  # Generalized to any object
@@ -119,8 +125,9 @@ func add_indicator(indicator_id: String, indicator_data: ObjectIndicatorData) ->
 	# Play entrance animation
 	_animate_indicator_entrance(indicator)
 	
-	# Update container visibility
+	# Update container visibility and scaling
 	_update_container_visibility()
+	_apply_width_scaling()
 	
 	Logger.debug("Added indicator: " + indicator_id + " (" + str(indicator_data.type) + ")", "ObjectIndicatorManager")
 	return true
@@ -146,8 +153,9 @@ func remove_indicator(indicator_id: String, animate: bool = true) -> bool:
 		indicator.get_parent().remove_child(indicator)
 		indicator.queue_free()
 	
-	# Update container visibility
+	# Update container visibility and scaling
 	_update_container_visibility()
+	_apply_width_scaling()
 	
 	Logger.debug("Removed indicator: " + indicator_id, "ObjectIndicatorManager")
 	return true
@@ -171,6 +179,136 @@ func clear_indicators(animate: bool = true) -> void:
 	
 	# Clear any remaining timers
 	auto_remove_timers.clear()
+	
+	# Clear all collections
+	collections.clear()
+
+## COLLECTION SUPPORT - Add an indicator to a collection with automatic sorting
+func add_collection_indicator(collection_id: String, item_id: String, indicator_data: ObjectIndicatorData, sort_priority: float = 0.0) -> bool:
+	# Initialize collection if it doesn't exist
+	if not collections.has(collection_id):
+		collections[collection_id] = {
+			"items": {},
+			"sort_key": "priority"
+		}
+	
+	var collection = collections[collection_id]
+	var full_id = _get_collection_indicator_id(collection_id, item_id)
+	
+	# Store item with sort priority
+	collection.items[item_id] = {
+		"data": indicator_data,
+		"priority": sort_priority,
+		"full_id": full_id
+	}
+	
+	# Add the indicator using the standard system
+	var success = add_indicator(full_id, indicator_data)
+	if not success:
+		collection.items.erase(item_id)
+		return false
+	
+	# Re-sort the collection to maintain order
+	_sort_collection(collection_id)
+	
+	Logger.debug("Added collection indicator: " + collection_id + "." + item_id + " (priority=" + str(sort_priority) + ")", "ObjectIndicatorManager")
+	return true
+
+## Remove an indicator from a collection
+func remove_collection_indicator(collection_id: String, item_id: String, animate: bool = true) -> bool:
+	if not collections.has(collection_id):
+		return false
+	
+	var collection = collections[collection_id]
+	if not collection.items.has(item_id):
+		return false
+	
+	var item = collection.items[item_id]
+	var full_id = item.full_id
+	
+	# Remove from the standard indicator system
+	var success = await remove_indicator(full_id, animate)
+	if success:
+		collection.items.erase(item_id)
+		
+		# Clean up empty collection
+		if collection.items.is_empty():
+			collections.erase(collection_id)
+		else:
+			# Re-sort remaining items
+			_sort_collection(collection_id)
+	
+	Logger.debug("Removed collection indicator: " + collection_id + "." + item_id, "ObjectIndicatorManager")
+	return success
+
+## Clear all indicators in a collection
+func clear_collection(collection_id: String, animate: bool = true) -> void:
+	if not collections.has(collection_id):
+		return
+	
+	var collection = collections[collection_id]
+	var item_ids = collection.items.keys()
+	
+	for item_id in item_ids:
+		await remove_collection_indicator(collection_id, item_id, animate)
+
+## Update sort priority for a collection item
+func update_collection_priority(collection_id: String, item_id: String, new_priority: float) -> bool:
+	if not collections.has(collection_id):
+		return false
+	
+	var collection = collections[collection_id]
+	if not collection.items.has(item_id):
+		return false
+	
+	collection.items[item_id].priority = new_priority
+	_sort_collection(collection_id)
+	
+	Logger.debug("Updated collection priority: " + collection_id + "." + item_id + " (priority=" + str(new_priority) + ")", "ObjectIndicatorManager")
+	return true
+
+## Get collection indicator count
+func get_collection_count(collection_id: String) -> int:
+	if not collections.has(collection_id):
+		return 0
+	return collections[collection_id].items.size()
+
+## Check if collection has a specific item
+func has_collection_indicator(collection_id: String, item_id: String) -> bool:
+	if not collections.has(collection_id):
+		return false
+	return collections[collection_id].items.has(item_id)
+
+## Internal: Generate unique ID for collection items
+func _get_collection_indicator_id(collection_id: String, item_id: String) -> String:
+	return collection_id + "_" + item_id
+
+## Internal: Sort collection items by priority (higher priority first)
+func _sort_collection(collection_id: String) -> void:
+	if not collections.has(collection_id):
+		return
+	
+	var collection = collections[collection_id]
+	var items = collection.items
+	
+	# Create sorted array of item keys by priority
+	var sorted_items = items.keys()
+	sorted_items.sort_custom(func(a, b): return items[a].priority > items[b].priority)
+	
+	# Reorder indicators in container to match sort order
+	for i in range(sorted_items.size()):
+		var item_id = sorted_items[i]
+		var full_id = items[item_id].full_id
+		
+		if active_indicators.has(full_id):
+			var indicator = active_indicators[full_id]
+			# Move indicator to correct position in container
+			var current_index = indicator.get_index()
+			if current_index != i:
+				indicator_container.move_child(indicator, i)
+	
+	# Apply scaling after reordering
+	_apply_width_scaling()
 
 ## Check if an indicator exists
 func has_indicator(indicator_id: String) -> bool:
@@ -314,6 +452,84 @@ func _process_auto_removal_timers(delta: float) -> void:
 	# Remove expired indicators
 	for indicator_id in indicators_to_remove:
 		remove_indicator(indicator_id, true)
+
+## Apply width constraint by scaling content to fit container width
+func _apply_width_scaling() -> void:
+	if not scale_to_fit or max_width <= 0.0 or not indicator_container:
+		# Reset container constraints if disabled
+		_reset_container_constraints()
+		return
+	
+	# Calculate current content width
+	var total_width = _calculate_total_width()
+	
+	# Set container to exactly max_width
+	indicator_container.custom_minimum_size.x = max_width
+	
+	if total_width <= max_width:
+		# Content fits naturally, no scaling needed
+		_reset_indicator_scaling()
+		return
+	
+	# Content exceeds max_width, scale it down to fit
+	var scale_factor = max_width / total_width
+	
+	# Apply scaling to all indicators to fit within container width
+	for indicator in active_indicators.values():
+		if indicator and is_instance_valid(indicator):
+			if maintain_aspect_ratio:
+				# Uniform scaling (maintains aspect ratio)
+				indicator.scale = Vector2(scale_factor, scale_factor)
+			else:
+				# Non-uniform scaling (compress horizontally, keep height)
+				indicator.scale = Vector2(scale_factor, 1.0)
+
+## Calculate total width needed for all indicators including spacing
+func _calculate_total_width() -> float:
+	if not indicator_container:
+		return 0.0
+	
+	var children = indicator_container.get_children()
+	if children.is_empty():
+		return 0.0
+	
+	var total_width = 0.0
+	
+	for i in range(children.size()):
+		var child = children[i]
+		if child and is_instance_valid(child):
+			# Get the child's size (considering current scale)
+			var child_size = child.size * child.scale.x
+			total_width += child_size.x
+			
+			# Add spacing between items (not after the last item)
+			if i < children.size() - 1:
+				total_width += indicator_spacing
+	
+	return total_width
+
+## Reset container constraints to original state
+func _reset_container_constraints() -> void:
+	if indicator_container:
+		indicator_container.custom_minimum_size = Vector2.ZERO
+	_reset_indicator_scaling()
+
+## Reset all indicator scaling to original size
+func _reset_indicator_scaling() -> void:
+	for indicator in active_indicators.values():
+		if indicator and is_instance_valid(indicator):
+			indicator.scale = Vector2.ONE
+
+## Set fixed width constraints
+func set_width_constraints(max_width_pixels: float, enable_scaling: bool = true, keep_aspect_ratio: bool = true) -> void:
+	max_width = max_width_pixels
+	scale_to_fit = enable_scaling
+	maintain_aspect_ratio = keep_aspect_ratio
+	
+	# Apply new constraints immediately
+	_apply_width_scaling()
+	
+	Logger.debug("Set width constraints: max_width=" + str(max_width) + ", scale_to_fit=" + str(scale_to_fit) + ", maintain_aspect=" + str(maintain_aspect_ratio), "ObjectIndicatorManager")
 
 ## Cleanup on removal
 ## Note: When target object is destroyed, this manager is also cleaned up automatically

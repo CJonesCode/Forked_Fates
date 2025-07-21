@@ -176,7 +176,10 @@ func _apply_respawn_invincibility(player: BasePlayer, duration: float) -> void:
 	# Could implement visual feedback like blinking
 	var tween: Tween = create_tween()
 	tween.tween_method(_blink_player, 1.0, 0.5, duration)
-	tween.tween_callback(func(): player.modulate = Color.WHITE)
+	tween.tween_callback(func(): 
+		if is_instance_valid(player):
+			player.modulate = Color.WHITE
+	)
 
 ## Visual feedback for invincibility
 func _blink_player(alpha: float) -> void:

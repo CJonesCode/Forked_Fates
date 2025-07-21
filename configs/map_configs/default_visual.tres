@@ -1,0 +1,25 @@
+[gd_resource type="Resource" format=3 load_steps=2]
+
+[ext_resource type="Script" path="res://scripts/map/config/map_visual_config.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+node_size = Vector2(100, 70)
+layer_spacing = 160.0
+row_spacing = 120.0
+color_current = Color(1, 0.843, 0, 1)
+color_available = Color(0.2, 0.6, 1, 1)
+color_visited = Color(0.4, 0.8, 0.4, 1)
+color_locked = Color(0.5, 0.5, 0.5, 1)
+line_width = 3.0
+line_color = Color(0.3, 0.3, 0.3, 0.9)
+line_color_visited = Color(0.1, 0.1, 0.1, 1.0)
+dash_pattern_enabled = true
+dash_length = 6.0
+container_margin = Vector2(30, 30)
+content_padding = Vector2(12, 12)
+corner_radius = 10.0
+border_width = 2.0
+border_color_multiplier = 0.3
+font_size = 12
+font_color = Color(1, 1, 1, 1)
